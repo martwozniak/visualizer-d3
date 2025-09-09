@@ -85,13 +85,80 @@ export default class D3VisualizerPlugin extends Plugin {
 	}
 
 	private processD3CodeBlock(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) {
-		const container = el.createDiv('d3-visualization-container');
+		const wrapper = el.createDiv('d3-visualization-wrapper');
+		wrapper.style.position = 'relative';
+		wrapper.style.width = '100%';
+		wrapper.style.marginBottom = '10px';
+
+		// Create control toolbar
+		const toolbar = wrapper.createDiv('d3-control-toolbar');
+		toolbar.style.position = 'absolute';
+		toolbar.style.top = '8px';
+		toolbar.style.left = '8px';
+		toolbar.style.zIndex = '10';
+		toolbar.style.display = 'flex';
+		toolbar.style.gap = '4px';
+
+		// Add pen icon for graphical editor
+		const editBtn = toolbar.createEl('button', { cls: 'd3-edit-btn' });
+		editBtn.innerHTML = '✏️';
+		editBtn.title = 'Edit visualization graphically';
+		editBtn.style.background = 'var(--background-primary)';
+		editBtn.style.border = '1px solid var(--background-modifier-border)';
+		editBtn.style.borderRadius = '4px';
+		editBtn.style.padding = '4px 8px';
+		editBtn.style.cursor = 'pointer';
+		editBtn.style.fontSize = '14px';
+		editBtn.style.opacity = '0.7';
+		editBtn.style.transition = 'opacity 0.2s';
+
+		editBtn.addEventListener('mouseenter', () => {
+			editBtn.style.opacity = '1';
+		});
+		editBtn.addEventListener('mouseleave', () => {
+			editBtn.style.opacity = '0.7';
+		});
+
+		editBtn.addEventListener('click', () => {
+			// Hide the original visualization while editing
+			container.style.display = 'none';
+			this.openGraphicalEditor(source, ctx, () => {
+				// Show the visualization again when editor closes
+				container.style.display = 'block';
+			});
+		});
+
+		// Add code view icon
+		const codeBtn = toolbar.createEl('button', { cls: 'd3-code-btn' });
+		codeBtn.innerHTML = '📝';
+		codeBtn.title = 'View source code';
+		codeBtn.style.background = 'var(--background-primary)';
+		codeBtn.style.border = '1px solid var(--background-modifier-border)';
+		codeBtn.style.borderRadius = '4px';
+		codeBtn.style.padding = '4px 8px';
+		codeBtn.style.cursor = 'pointer';
+		codeBtn.style.fontSize = '14px';
+		codeBtn.style.opacity = '0.7';
+		codeBtn.style.transition = 'opacity 0.2s';
+
+		codeBtn.addEventListener('mouseenter', () => {
+			codeBtn.style.opacity = '1';
+		});
+		codeBtn.addEventListener('mouseleave', () => {
+			codeBtn.style.opacity = '0.7';
+		});
+
+		codeBtn.addEventListener('click', () => {
+			this.showCodeViewer(source, ctx);
+		});
+
+		// Create visualization container
+		const container = wrapper.createDiv('d3-visualization-container');
 		container.style.width = '100%';
 		container.style.minHeight = `${this.settings.defaultHeight}px`;
 		container.style.border = '1px solid var(--background-modifier-border)';
 		container.style.borderRadius = '4px';
 		container.style.padding = '10px';
-		container.style.marginBottom = '10px';
 
 		try {
 			this.executeD3Code(source, container);
@@ -100,7 +167,7 @@ export default class D3VisualizerPlugin extends Plugin {
 		}
 	}
 
-	private executeD3Code(code: string, container: HTMLElement) {
+	executeD3Code(code: string, container: HTMLElement) {
 		const d3Context = {
 			d3: d3,
 			container: container,
@@ -206,6 +273,22 @@ export default class D3VisualizerPlugin extends Plugin {
 
 		const errorMessage = errorDiv.createDiv();
 		errorMessage.textContent = error.toString();
+	}
+
+	private openGraphicalEditor(source: string, ctx: MarkdownPostProcessorContext, onClose?: () => void) {
+		const editor = new D3GraphicalEditor(this.app, this, source, ctx);
+		if (onClose) {
+			const originalOnClose = editor.onClose.bind(editor);
+			editor.onClose = function() {
+				originalOnClose();
+				onClose();
+			};
+		}
+		editor.open();
+	}
+
+	private showCodeViewer(source: string, ctx: MarkdownPostProcessorContext) {
+		new D3CodeEditor(this.app, this, source, ctx).open();
 	}
 
 	private showTemplateMenu(editor?: Editor) {
@@ -556,7 +639,7 @@ export default class D3VisualizerPlugin extends Plugin {
 		new Notice(`Inserted ${templateKey} template`);
 	}
 
-	private getTemplates(): { [key: string]: string } {
+	getTemplates(): { [key: string]: string } {
 		return {
 			'basic': `// Create an SVG element
 const svg = d3.select(container)
@@ -2858,7 +2941,7 @@ svg.append("text")
 
 			'reusable-line-chart': `// Reusable line chart with configurable options
 function createLineChart() {
-  let margin = {top: 20, right: 20, bottom: 30, left: 40};
+  let margin = {top: 20, right: 20, bottom: 50, left: 40};
   let width = 600;
   let height = 400;
   let xValue = d => d.x;
@@ -3392,6 +3475,1404 @@ class D3TemplateBrowserModal extends Modal {
 		}, 100);
 
 		new Notice(`Inserted ${this.selectedTemplate.name} template`);
+		this.close();
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
+}
+
+class D3CodeEditor extends Modal {
+	plugin: D3VisualizerPlugin;
+	source: string;
+	ctx: MarkdownPostProcessorContext;
+	codeTextarea: HTMLTextAreaElement;
+	previewContainer: HTMLElement;
+
+	constructor(app: App, plugin: D3VisualizerPlugin, source: string, ctx: MarkdownPostProcessorContext) {
+		super(app);
+		this.plugin = plugin;
+		this.source = source;
+		this.ctx = ctx;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.style.maxWidth = '1200px';
+		contentEl.style.width = '90vw';
+		contentEl.style.maxHeight = '80vh';
+		contentEl.style.display = 'flex';
+		contentEl.style.flexDirection = 'column';
+		contentEl.style.overflow = 'hidden';
+
+		// Header
+		const header = contentEl.createEl('h2', { text: 'D3.js Code Editor' });
+		header.style.marginBottom = '12px';
+		header.style.flexShrink = '0';
+
+		// Main container
+		const mainContainer = contentEl.createDiv();
+		mainContainer.style.display = 'flex';
+		mainContainer.style.gap = '16px';
+		mainContainer.style.flex = '1';
+		mainContainer.style.minHeight = '0';
+		mainContainer.style.marginBottom = '12px';
+
+		// Left panel - Code editor
+		const leftPanel = mainContainer.createDiv();
+		leftPanel.style.flex = '1';
+		leftPanel.style.display = 'flex';
+		leftPanel.style.flexDirection = 'column';
+
+		const codeHeader = leftPanel.createEl('h3', { text: 'Code' });
+		codeHeader.style.marginBottom = '8px';
+		codeHeader.style.fontSize = '1.1em';
+
+		this.codeTextarea = leftPanel.createEl('textarea');
+		this.codeTextarea.value = this.source;
+		this.codeTextarea.style.flex = '1';
+		this.codeTextarea.style.width = '100%';
+		this.codeTextarea.style.border = '1px solid var(--background-modifier-border)';
+		this.codeTextarea.style.borderRadius = '4px';
+		this.codeTextarea.style.padding = '12px';
+		this.codeTextarea.style.fontFamily = 'var(--font-monospace)';
+		this.codeTextarea.style.fontSize = '13px';
+		this.codeTextarea.style.lineHeight = '1.5';
+		this.codeTextarea.style.backgroundColor = 'var(--background-primary-alt)';
+		this.codeTextarea.style.color = 'var(--text-normal)';
+		this.codeTextarea.style.resize = 'none';
+		this.codeTextarea.style.outline = 'none';
+		this.codeTextarea.style.tabSize = '2';
+
+		// Add syntax highlighting hint
+		const syntaxHint = leftPanel.createDiv();
+		syntaxHint.style.fontSize = '12px';
+		syntaxHint.style.color = 'var(--text-muted)';
+		syntaxHint.style.marginTop = '4px';
+		syntaxHint.textContent = '💡 Tip: Use Tab for indentation, Ctrl+A to select all';
+
+		// Right panel - Live preview
+		const rightPanel = mainContainer.createDiv();
+		rightPanel.style.flex = '1';
+		rightPanel.style.display = 'flex';
+		rightPanel.style.flexDirection = 'column';
+
+		const previewHeader = rightPanel.createEl('h3', { text: 'Live Preview' });
+		previewHeader.style.marginBottom = '8px';
+		previewHeader.style.fontSize = '1.1em';
+
+		this.previewContainer = rightPanel.createDiv();
+		this.previewContainer.style.flex = '1';
+		this.previewContainer.style.border = '1px solid var(--background-modifier-border)';
+		this.previewContainer.style.borderRadius = '4px';
+		this.previewContainer.style.padding = '12px';
+		this.previewContainer.style.backgroundColor = 'var(--background-primary-alt)';
+		this.previewContainer.style.overflow = 'auto';
+
+		// Update preview initially
+		this.updatePreview();
+
+		// Add live preview updates
+		let updateTimeout: NodeJS.Timeout;
+		this.codeTextarea.addEventListener('input', () => {
+			clearTimeout(updateTimeout);
+			updateTimeout = setTimeout(() => {
+				this.updatePreview();
+			}, 500); // Debounce updates
+		});
+
+		// Add keyboard shortcuts
+		this.codeTextarea.addEventListener('keydown', (e) => {
+			if (e.key === 'Tab') {
+				e.preventDefault();
+				const start = this.codeTextarea.selectionStart;
+				const end = this.codeTextarea.selectionEnd;
+				this.codeTextarea.value = this.codeTextarea.value.substring(0, start) + '  ' + this.codeTextarea.value.substring(end);
+				this.codeTextarea.setSelectionRange(start + 2, start + 2);
+			}
+		});
+
+		// Actions
+		const actions = contentEl.createDiv();
+		actions.style.display = 'flex';
+		actions.style.justifyContent = 'space-between';
+		actions.style.gap = '8px';
+		actions.style.padding = '12px 0';
+		actions.style.borderTop = '1px solid var(--background-modifier-border)';
+		actions.style.flexShrink = '0';
+
+		// Left side actions
+		const leftActions = actions.createDiv();
+		leftActions.style.display = 'flex';
+		leftActions.style.gap = '8px';
+
+		const applyBtn = leftActions.createEl('button', { text: 'Apply Changes', cls: 'mod-cta' });
+		applyBtn.addEventListener('click', () => {
+			this.applyChanges();
+		});
+
+		const resetBtn = leftActions.createEl('button', { text: 'Reset to Original' });
+		resetBtn.addEventListener('click', () => {
+			this.codeTextarea.value = this.source;
+			this.updatePreview();
+		});
+
+		// Right side actions
+		const rightActions = actions.createDiv();
+		rightActions.style.display = 'flex';
+		rightActions.style.gap = '8px';
+
+		const copyBtn = rightActions.createEl('button', { text: 'Copy Code' });
+		copyBtn.addEventListener('click', () => {
+			navigator.clipboard.writeText(this.codeTextarea.value);
+			new Notice('Code copied to clipboard');
+		});
+
+		const closeBtn = rightActions.createEl('button', { text: 'Close' });
+		closeBtn.addEventListener('click', () => {
+			this.close();
+		});
+	}
+
+	private updatePreview() {
+		this.previewContainer.empty();
+		
+		try {
+			const currentCode = this.codeTextarea.value;
+			this.plugin.executeD3Code(currentCode, this.previewContainer);
+		} catch (error) {
+			const errorDiv = this.previewContainer.createDiv();
+			errorDiv.style.color = 'var(--text-error)';
+			errorDiv.style.backgroundColor = 'var(--background-modifier-error)';
+			errorDiv.style.padding = '12px';
+			errorDiv.style.borderRadius = '4px';
+			errorDiv.style.fontFamily = 'var(--font-monospace)';
+			errorDiv.style.fontSize = '12px';
+			errorDiv.innerHTML = `<strong>Error:</strong><br>${error.toString()}`;
+		}
+	}
+
+	private applyChanges() {
+		const updatedCode = this.codeTextarea.value;
+		
+		// Find the current file and update the code block
+		const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (activeView && activeView.editor) {
+			// This is a simplified approach - in a real implementation,
+			// you'd need to locate the specific code block and replace it
+			new Notice('Code updated! Please manually replace your d3 code block with the new code.');
+			
+			// Copy to clipboard
+			navigator.clipboard.writeText(updatedCode);
+			new Notice('Updated code copied to clipboard');
+		}
+		
+		this.close();
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
+}
+
+class D3GraphicalEditor extends Modal {
+	plugin: D3VisualizerPlugin;
+	source: string;
+	ctx: MarkdownPostProcessorContext;
+	parsedData: any;
+	currentVisualizationType: string;
+	previewContainer: HTMLElement;
+
+	constructor(app: App, plugin: D3VisualizerPlugin, source: string, ctx: MarkdownPostProcessorContext) {
+		super(app);
+		this.plugin = plugin;
+		this.source = source;
+		this.ctx = ctx;
+		this.currentVisualizationType = 'bar-chart';
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.style.maxWidth = '900px';
+		contentEl.style.width = '85vw';
+		contentEl.style.maxHeight = '75vh';
+		contentEl.style.overflow = 'hidden';
+		contentEl.style.display = 'flex';
+		contentEl.style.flexDirection = 'column';
+
+		// Parse existing visualization to extract data
+		this.parsedData = this.parseVisualizationData();
+
+		// Header
+		const header = contentEl.createEl('h2', { text: 'D3.js Visual Editor' });
+		header.style.marginBottom = '12px';
+		header.style.flexShrink = '0';
+
+		// Main content container
+		const mainContainer = contentEl.createDiv();
+		mainContainer.style.display = 'flex';
+		mainContainer.style.gap = '16px';
+		mainContainer.style.flex = '1';
+		mainContainer.style.minHeight = '0';
+		mainContainer.style.marginBottom = '12px';
+
+		// Left panel - Controls
+		const leftPanel = mainContainer.createDiv();
+		leftPanel.style.width = '280px';
+		leftPanel.style.borderRight = '1px solid var(--background-modifier-border)';
+		leftPanel.style.paddingRight = '16px';
+		leftPanel.style.overflowY = 'auto';
+
+		this.createControlsPanel(leftPanel);
+
+		// Right panel - Preview
+		const rightPanel = mainContainer.createDiv();
+		rightPanel.style.flex = '1';
+		rightPanel.style.display = 'flex';
+		rightPanel.style.flexDirection = 'column';
+		rightPanel.style.minWidth = '0';
+
+		const previewHeader = rightPanel.createEl('h3', { text: 'Preview' });
+		previewHeader.style.marginBottom = '8px';
+		previewHeader.style.fontSize = '1.1em';
+
+		this.previewContainer = rightPanel.createDiv();
+		this.previewContainer.style.flex = '1';
+		this.previewContainer.style.border = '1px solid var(--background-modifier-border)';
+		this.previewContainer.style.borderRadius = '4px';
+		this.previewContainer.style.padding = '12px';
+		this.previewContainer.style.backgroundColor = 'var(--background-primary-alt)';
+		this.previewContainer.style.overflow = 'hidden';
+		this.previewContainer.style.position = 'relative';
+
+		this.updatePreview(this.previewContainer);
+
+		// Actions
+		const actions = contentEl.createDiv();
+		actions.style.display = 'flex';
+		actions.style.justifyContent = 'flex-start';
+		actions.style.gap = '8px';
+		actions.style.padding = '12px 0';
+		actions.style.borderTop = '1px solid var(--background-modifier-border)';
+		actions.style.flexShrink = '0';
+
+		const applyBtn = actions.createEl('button', { text: 'Apply Changes', cls: 'mod-cta' });
+		applyBtn.addEventListener('click', () => {
+			this.applyChanges();
+		});
+
+		const cancelBtn = actions.createEl('button', { text: 'Cancel' });
+		cancelBtn.addEventListener('click', () => {
+			this.close();
+		});
+	}
+
+	private createControlsPanel(container: HTMLElement) {
+		// Visualization Type Section
+		const typeSection = container.createDiv();
+		typeSection.style.marginBottom = '24px';
+
+		const typeHeader = typeSection.createEl('h4', { text: 'Visualization Type' });
+		typeHeader.style.marginBottom = '8px';
+
+		const typeSelect = typeSection.createEl('select');
+		typeSelect.style.width = '100%';
+		typeSelect.style.padding = '8px 12px';
+		typeSelect.style.borderRadius = '4px';
+		typeSelect.style.border = '1px solid var(--background-modifier-border)';
+		typeSelect.style.fontSize = '14px';
+		typeSelect.style.lineHeight = '1.4';
+		typeSelect.style.height = '36px';
+		typeSelect.style.backgroundColor = 'var(--background-primary)';
+		typeSelect.style.color = 'var(--text-normal)';
+
+		const chartTypes = [
+			{ value: 'bar-chart', label: '📊 Bar Chart' },
+			{ value: 'horizontal-bar', label: '📊 Horizontal Bar Chart' },
+			{ value: 'line-chart', label: '📈 Line Chart' },
+			{ value: 'area-chart', label: '📉 Area Chart' },
+			{ value: 'scatter-plot', label: '🔵 Scatter Plot' },
+			{ value: 'bubble-chart', label: '🫧 Bubble Chart' },
+			{ value: 'pie-chart', label: '🥧 Pie Chart' },
+			{ value: 'donut-chart', label: '🍩 Donut Chart' },
+			{ value: 'histogram', label: '📊 Histogram' },
+			{ value: 'heatmap', label: '🔥 Heatmap' },
+			{ value: 'timeline', label: '📅 Timeline' },
+			{ value: 'radar', label: '🎯 Radar Chart' },
+			{ value: 'box-plot', label: '📦 Box Plot' },
+			{ value: 'stacked-bar-chart', label: '📊 Stacked Bar Chart' },
+		];
+
+		chartTypes.forEach(type => {
+			const option = typeSelect.createEl('option', { value: type.value, text: type.label });
+			if (type.value === this.currentVisualizationType) {
+				option.selected = true;
+			}
+		});
+		
+		// Ensure the select element reflects the current type
+		typeSelect.value = this.currentVisualizationType;
+
+		typeSelect.addEventListener('change', () => {
+			this.currentVisualizationType = typeSelect.value;
+			this.updateDataControls(container);
+			this.refreshPreview();
+		});
+
+		// Data Section
+		this.updateDataControls(container);
+	}
+
+	private updateDataControls(container: HTMLElement) {
+		// Remove existing data controls
+		const existingDataSection = container.querySelector('.data-section');
+		if (existingDataSection) {
+			existingDataSection.remove();
+		}
+
+		const dataSection = container.createDiv();
+		dataSection.classList.add('data-section');
+		dataSection.style.marginBottom = '24px';
+
+		const dataHeader = dataSection.createEl('h4', { text: 'Data' });
+		dataHeader.style.marginBottom = '12px';
+
+		// Add data entry based on chart type
+		if (this.currentVisualizationType === 'bar-chart') {
+			this.createBarChartDataControls(dataSection);
+		} else if (this.currentVisualizationType === 'line-chart') {
+			this.createLineChartDataControls(dataSection);
+		} else if (this.currentVisualizationType === 'scatter-plot') {
+			this.createScatterPlotDataControls(dataSection);
+		} else if (this.currentVisualizationType === 'pie-chart') {
+			this.createPieChartDataControls(dataSection);
+		}
+
+		// Style Controls
+		this.createStyleControls(dataSection);
+	}
+
+	private createBarChartDataControls(container: HTMLElement) {
+		const tableContainer = container.createDiv();
+		tableContainer.style.marginBottom = '12px';
+
+		const table = tableContainer.createEl('table');
+		table.style.width = '100%';
+		table.style.borderCollapse = 'collapse';
+
+		const header = table.createEl('tr');
+		const labelHeader = header.createEl('th', { text: 'Label' });
+		const valueHeader = header.createEl('th', { text: 'Value' });
+		[labelHeader, valueHeader].forEach(th => {
+			th.style.border = '1px solid var(--background-modifier-border)';
+			th.style.padding = '4px 8px';
+			th.style.backgroundColor = 'var(--background-primary-alt)';
+		});
+
+		// Initialize with sample data if no data exists
+		if (!this.parsedData.data || this.parsedData.data.length === 0) {
+			this.parsedData.data = [
+				{ label: 'A', value: 30 },
+				{ label: 'B', value: 80 },
+				{ label: 'C', value: 45 },
+				{ label: 'D', value: 60 },
+			];
+		}
+
+		this.parsedData.data.forEach((item: any, index: number) => {
+			const row = table.createEl('tr');
+			
+			const labelCell = row.createEl('td');
+			const labelInput = labelCell.createEl('input', { type: 'text', value: item.label });
+			labelInput.style.width = '100%';
+			labelInput.style.border = 'none';
+			labelInput.style.padding = '6px 8px';
+			labelInput.style.fontSize = '14px';
+			labelInput.style.backgroundColor = 'transparent';
+			labelInput.style.color = 'var(--text-normal)';
+			labelInput.addEventListener('input', () => {
+				this.parsedData.data[index].label = labelInput.value;
+				this.refreshPreview();
+			});
+
+			const valueCell = row.createEl('td');
+			const valueInput = valueCell.createEl('input', { type: 'number', value: item.value.toString() });
+			valueInput.style.width = '100%';
+			valueInput.style.border = 'none';
+			valueInput.style.padding = '6px 8px';
+			valueInput.style.fontSize = '14px';
+			valueInput.style.backgroundColor = 'transparent';
+			valueInput.style.color = 'var(--text-normal)';
+			valueInput.addEventListener('input', () => {
+				this.parsedData.data[index].value = parseFloat(valueInput.value) || 0;
+				this.refreshPreview();
+			});
+
+			[labelCell, valueCell].forEach(td => {
+				td.style.border = '1px solid var(--background-modifier-border)';
+				td.style.padding = '0';
+			});
+		});
+
+		const addBtn = container.createEl('button', { text: '+ Add Row' });
+		addBtn.style.marginTop = '8px';
+		addBtn.addEventListener('click', () => {
+			this.parsedData.data.push({ label: 'New', value: 0 });
+			this.updateDataControls(container.parentElement as HTMLElement);
+			this.refreshPreview();
+		});
+	}
+
+	private createLineChartDataControls(container: HTMLElement) {
+		// Similar to bar chart but for x,y coordinates
+		this.createBarChartDataControls(container);
+	}
+
+	private createScatterPlotDataControls(container: HTMLElement) {
+		// Similar to bar chart but for x,y coordinates
+		this.createBarChartDataControls(container);
+	}
+
+	private createPieChartDataControls(container: HTMLElement) {
+		// Similar to bar chart but emphasize that values should be portions
+		this.createBarChartDataControls(container);
+	}
+
+	private createStyleControls(container: HTMLElement) {
+		const styleSection = container.createDiv();
+		styleSection.style.marginTop = '20px';
+
+		const styleHeader = styleSection.createEl('h4', { text: 'Style Options' });
+		styleHeader.style.marginBottom = '12px';
+
+		// Width control
+		const widthContainer = styleSection.createDiv();
+		widthContainer.style.marginBottom = '8px';
+		widthContainer.createEl('label', { text: 'Width: ' });
+		const widthInput = widthContainer.createEl('input', { type: 'number', value: this.parsedData.width?.toString() || '600' });
+		widthInput.style.width = '80px';
+		widthInput.style.marginLeft = '8px';
+		widthInput.style.padding = '4px 8px';
+		widthInput.style.borderRadius = '4px';
+		widthInput.style.border = '1px solid var(--background-modifier-border)';
+		widthInput.style.fontSize = '14px';
+		widthInput.style.backgroundColor = 'var(--background-primary)';
+		widthInput.style.color = 'var(--text-normal)';
+		widthInput.addEventListener('input', () => {
+			this.parsedData.width = parseInt(widthInput.value) || 600;
+			this.refreshPreview();
+		});
+
+		// Height control
+		const heightContainer = styleSection.createDiv();
+		heightContainer.style.marginBottom = '8px';
+		heightContainer.createEl('label', { text: 'Height: ' });
+		const heightInput = heightContainer.createEl('input', { type: 'number', value: this.parsedData.height?.toString() || '400' });
+		heightInput.style.width = '80px';
+		heightInput.style.marginLeft = '8px';
+		heightInput.style.padding = '4px 8px';
+		heightInput.style.borderRadius = '4px';
+		heightInput.style.border = '1px solid var(--background-modifier-border)';
+		heightInput.style.fontSize = '14px';
+		heightInput.style.backgroundColor = 'var(--background-primary)';
+		heightInput.style.color = 'var(--text-normal)';
+		heightInput.addEventListener('input', () => {
+			this.parsedData.height = parseInt(heightInput.value) || 400;
+			this.refreshPreview();
+		});
+
+		// Color scheme
+		const colorContainer = styleSection.createDiv();
+		colorContainer.style.marginBottom = '16px';
+		
+		const colorLabel = colorContainer.createEl('label', { text: 'Color:' });
+		colorLabel.style.display = 'block';
+		colorLabel.style.marginBottom = '8px';
+		colorLabel.style.fontWeight = '500';
+
+		// Color type selector
+		const colorTypeContainer = colorContainer.createDiv();
+		colorTypeContainer.style.display = 'flex';
+		colorTypeContainer.style.gap = '8px';
+		colorTypeContainer.style.marginBottom = '8px';
+
+		const presetRadio = colorTypeContainer.createEl('input', { type: 'radio', attr: { name: 'colorType', value: 'preset' } });
+		presetRadio.id = 'preset-radio';
+		presetRadio.checked = true;
+		const presetLabel = colorTypeContainer.createEl('label', { text: 'Preset', attr: { for: 'preset-radio' } });
+		presetLabel.style.marginRight = '12px';
+
+		const customRadio = colorTypeContainer.createEl('input', { type: 'radio', attr: { name: 'colorType', value: 'custom' } });
+		customRadio.id = 'custom-radio';
+		const customLabel = colorTypeContainer.createEl('label', { text: 'Custom', attr: { for: 'custom-radio' } });
+
+		// Preset colors dropdown
+		const presetContainer = colorContainer.createDiv();
+		const colorSelect = presetContainer.createEl('select');
+		colorSelect.style.width = '100%';
+		colorSelect.style.padding = '4px 8px';
+		colorSelect.style.borderRadius = '4px';
+		colorSelect.style.border = '1px solid var(--background-modifier-border)';
+		colorSelect.style.fontSize = '14px';
+		colorSelect.style.height = '32px';
+		colorSelect.style.backgroundColor = 'var(--background-primary)';
+		colorSelect.style.color = 'var(--text-normal)';
+		
+		const presetColors = [
+			{ value: 'steelblue', label: '🔵 Steel Blue' },
+			{ value: 'green', label: '🟢 Green' },
+			{ value: 'red', label: '🔴 Red' },
+			{ value: 'purple', label: '🟣 Purple' },
+			{ value: 'orange', label: '🟠 Orange' },
+			{ value: 'teal', label: '🔷 Teal' },
+			{ value: 'crimson', label: '🔺 Crimson' },
+			{ value: 'goldenrod', label: '🟡 Golden' }
+		];
+		
+		presetColors.forEach(color => {
+			const option = colorSelect.createEl('option', { value: color.value, text: color.label });
+			if (color.value === (this.parsedData.color || 'steelblue')) {
+				option.selected = true;
+			}
+		});
+
+		// Custom color picker
+		const customContainer = colorContainer.createDiv();
+		customContainer.style.display = 'none';
+		
+		const colorPickerRow = customContainer.createDiv();
+		colorPickerRow.style.display = 'flex';
+		colorPickerRow.style.alignItems = 'center';
+		colorPickerRow.style.gap = '8px';
+
+		const colorPicker = colorPickerRow.createEl('input', { type: 'color', value: '#4682b4' });
+		colorPicker.style.width = '40px';
+		colorPicker.style.height = '32px';
+		colorPicker.style.border = '1px solid var(--background-modifier-border)';
+		colorPicker.style.borderRadius = '4px';
+		colorPicker.style.cursor = 'pointer';
+
+		const hexInput = colorPickerRow.createEl('input', { type: 'text', value: '#4682b4', attr: { placeholder: '#000000' } });
+		hexInput.style.flex = '1';
+		hexInput.style.padding = '4px 8px';
+		hexInput.style.borderRadius = '4px';
+		hexInput.style.border = '1px solid var(--background-modifier-border)';
+		hexInput.style.fontSize = '14px';
+		hexInput.style.height = '32px';
+		hexInput.style.backgroundColor = 'var(--background-primary)';
+		hexInput.style.color = 'var(--text-normal)';
+		hexInput.style.fontFamily = 'var(--font-monospace)';
+
+		// Event handlers for radio buttons
+		presetRadio.addEventListener('change', () => {
+			if (presetRadio.checked) {
+				presetContainer.style.display = 'block';
+				customContainer.style.display = 'none';
+				this.parsedData.color = colorSelect.value;
+				this.refreshPreview();
+			}
+		});
+
+		customRadio.addEventListener('change', () => {
+			if (customRadio.checked) {
+				presetContainer.style.display = 'none';
+				customContainer.style.display = 'block';
+				this.parsedData.color = colorPicker.value;
+				this.refreshPreview();
+			}
+		});
+
+		// Preset color change
+		colorSelect.addEventListener('change', () => {
+			if (presetRadio.checked) {
+				this.parsedData.color = colorSelect.value;
+				this.refreshPreview();
+			}
+		});
+
+		// Custom color picker change
+		colorPicker.addEventListener('input', () => {
+			if (customRadio.checked) {
+				hexInput.value = colorPicker.value;
+				this.parsedData.color = colorPicker.value;
+				this.refreshPreview();
+			}
+		});
+
+		// Hex input change
+		hexInput.addEventListener('input', () => {
+			const hexValue = hexInput.value;
+			if (/^#[0-9A-Fa-f]{6}$/.test(hexValue)) {
+				colorPicker.value = hexValue;
+				if (customRadio.checked) {
+					this.parsedData.color = hexValue;
+					this.refreshPreview();
+				}
+			}
+		});
+
+		// Initialize based on current color
+		if (this.parsedData.color && this.parsedData.color.startsWith('#')) {
+			customRadio.checked = true;
+			presetRadio.checked = false;
+			presetContainer.style.display = 'none';
+			customContainer.style.display = 'block';
+			colorPicker.value = this.parsedData.color;
+			hexInput.value = this.parsedData.color;
+		}
+	}
+
+	private extractSimpleDataArray(dataString: string): any[] {
+		const result: any[] = [];
+		// Simple regex-based extraction for basic data patterns
+		const objectMatches = dataString.match(/\{[^}]*\}/g);
+		if (objectMatches) {
+			for (const match of objectMatches) {
+				try {
+					const obj = JSON.parse(match);
+					result.push(obj);
+				} catch (e) {
+					// Try to extract label and value manually
+					const labelMatch = match.match(/["']?label["']?\s*:\s*["']([^"']+)["']/);
+					const valueMatch = match.match(/["']?value["']?\s*:\s*([0-9.]+)/);
+					if (labelMatch && valueMatch) {
+						result.push({
+							label: labelMatch[1],
+							value: parseFloat(valueMatch[1])
+						});
+					}
+				}
+			}
+		}
+		return result;
+	}
+
+	private parseVisualizationData(): any {
+		try {
+			const code = this.source;
+			let parsedData = {
+				data: [],
+				width: 600,
+				height: 400,
+				color: 'steelblue'
+			};
+
+			// Extract width and height
+			const widthMatch = code.match(/width[:\s]*=?[:\s]*(\d+)/i);
+			if (widthMatch) {
+				parsedData.width = parseInt(widthMatch[1]);
+			}
+
+			const heightMatch = code.match(/height[:\s]*=?[:\s]*(\d+)/i);
+			if (heightMatch) {
+				parsedData.height = parseInt(heightMatch[1]);
+			}
+
+			// Extract color
+			const colorMatch = code.match(/(?:fill|stroke|color)[:\s]*['"`]([^'"`]+)['"`]/i);
+			if (colorMatch) {
+				parsedData.color = colorMatch[1];
+			}
+
+			// Try to extract data array - look for various data patterns
+			let dataMatches = code.match(/(?:const|let|var)\s+data\s*=\s*(\[[\s\S]*?\]);?/);
+			
+			// If no data found, try other variable names
+			if (!dataMatches) {
+				dataMatches = code.match(/(?:const|let|var)\s+(?:events|nodes|tasks|matrix)\s*=\s*(\[[\s\S]*?\]);?/);
+			}
+			
+			if (dataMatches) {
+				try {
+					const dataString = dataMatches[1];
+					// Try to parse as JSON first (safer than eval)
+					const extractedData = JSON.parse(dataString);
+					if (Array.isArray(extractedData) && extractedData.length > 0) {
+						parsedData.data = extractedData;
+					}
+				} catch (e) {
+					// If JSON.parse fails, try a simple regex-based extraction
+					try {
+						const simpleData = this.extractSimpleDataArray(dataMatches[1]);
+						if (simpleData.length > 0) {
+							parsedData.data = simpleData;
+						}
+					} catch (e2) {
+						console.warn('Could not parse data array:', e2);
+					}
+				}
+			}
+
+			// If no data found, try to extract from different patterns
+			if (parsedData.data.length === 0) {
+				// Look for inline data in D3 calls
+				const inlineDataMatch = code.match(/\.data\(\s*(\[[\s\S]*?\])\s*\)/);
+				if (inlineDataMatch) {
+					try {
+						const extractedData = JSON.parse(inlineDataMatch[1]);
+						if (Array.isArray(extractedData)) {
+							parsedData.data = extractedData;
+						}
+					} catch (e) {
+						try {
+							const simpleData = this.extractSimpleDataArray(inlineDataMatch[1]);
+							if (simpleData.length > 0) {
+								parsedData.data = simpleData;
+							}
+						} catch (e2) {
+							console.warn('Could not parse inline data:', e2);
+						}
+					}
+				}
+			}
+
+			// Detect chart type based on D3 code patterns (prioritized by specificity)
+			if (code.includes('innerRadius') && (code.includes('d3.pie') || code.includes('.pie()'))) {
+				this.currentVisualizationType = 'donut-chart';
+			} else if (code.includes('d3.pie') || code.includes('.pie()') || code.includes('arc()') && code.includes('pie')) {
+				this.currentVisualizationType = 'pie-chart';
+			} else if (code.includes('d3.histogram') || code.includes('.histogram()') || code.includes('bins')) {
+				this.currentVisualizationType = 'histogram';
+			} else if (code.includes('heatmap') || (code.includes('rect') && code.includes('colorScale'))) {
+				this.currentVisualizationType = 'heatmap';
+			} else if (code.includes('timeline') || code.includes('timeScale') || code.includes('events')) {
+				this.currentVisualizationType = 'timeline';
+			} else if (code.includes('radar') || code.includes('angleScale') || code.includes('radiusScale')) {
+				this.currentVisualizationType = 'radar';
+			} else if (code.includes('box') && code.includes('whisker') || code.includes('quartile')) {
+				this.currentVisualizationType = 'box-plot';
+			} else if (code.includes('bubble') || (code.includes('circle') && code.includes('scale') && code.includes('radius'))) {
+				this.currentVisualizationType = 'bubble-chart';
+			} else if (code.includes('stacked') || code.includes('stack()') || code.includes('d3.stack')) {
+				this.currentVisualizationType = 'stacked-bar-chart';
+			} else if (code.includes('scaleLinear') && code.includes('rect') && code.includes('attr("x"') && !code.includes('scaleBand')) {
+				this.currentVisualizationType = 'horizontal-bar';
+			} else if (code.includes('d3.area') || code.includes('.area()') || (code.includes('area') && code.includes('y0') && code.includes('y1'))) {
+				this.currentVisualizationType = 'area-chart';
+			} else if (code.includes('d3.line') || code.includes('.line()') || (code.includes('line') && code.includes('curve'))) {
+				this.currentVisualizationType = 'line-chart';
+			} else if (code.includes('scaleBand') || (code.includes('rect') && code.includes('bandwidth')) || code.includes('bar')) {
+				this.currentVisualizationType = 'bar-chart';
+			} else if ((code.includes('circle') && code.includes('cx') && code.includes('cy')) || code.includes('scatter')) {
+				this.currentVisualizationType = 'scatter-plot';
+			} else {
+				// Try to detect by common element types
+				if (code.includes('append("rect")') || code.includes("append('rect')")) {
+					this.currentVisualizationType = 'bar-chart';
+				} else if (code.includes('append("circle")') || code.includes("append('circle')")) {
+					this.currentVisualizationType = 'scatter-plot';
+				} else if (code.includes('append("path")') || code.includes("append('path')")) {
+					// Path could be line, area, or pie - check for more specific patterns
+					if (code.includes('stroke') && !code.includes('fill')) {
+						this.currentVisualizationType = 'line-chart';
+					} else if (code.includes('fill') && code.includes('opacity')) {
+						this.currentVisualizationType = 'area-chart';
+					} else {
+						this.currentVisualizationType = 'line-chart';
+					}
+				} else {
+					// Default to bar chart if can't determine
+					this.currentVisualizationType = 'bar-chart';
+				}
+			}
+
+			// If still no data, provide sample data based on chart type
+			if (parsedData.data.length === 0) {
+				if (this.currentVisualizationType === 'pie-chart') {
+					parsedData.data = [
+						{ label: 'Category A', value: 30 },
+						{ label: 'Category B', value: 45 },
+						{ label: 'Category C', value: 25 }
+					];
+				} else {
+					parsedData.data = [
+						{ label: 'A', value: 30 },
+						{ label: 'B', value: 80 },
+						{ label: 'C', value: 45 },
+						{ label: 'D', value: 60 }
+					];
+				}
+			}
+
+			return parsedData;
+		} catch (error) {
+			console.warn('Error parsing visualization data:', error);
+			// Return safe defaults
+			return {
+				data: [
+					{ label: 'A', value: 30 },
+					{ label: 'B', value: 80 },
+					{ label: 'C', value: 45 },
+					{ label: 'D', value: 60 }
+				],
+				width: 600,
+				height: 400,
+				color: 'steelblue'
+			};
+		}
+	}
+
+	private refreshPreview() {
+		this.updatePreview(this.previewContainer);
+	}
+
+	private updatePreview(container: HTMLElement) {
+		if (!container) return;
+		
+		container.empty();
+		
+		try {
+			const generatedCode = this.generateVisualizationCode();
+			this.plugin.executeD3Code(generatedCode, container);
+		} catch (error) {
+			container.createEl('div', { text: 'Preview Error: ' + error.toString() });
+		}
+	}
+
+	private generateVisualizationCode(): string {
+		const data = this.parsedData.data;
+		// Use smaller dimensions for preview
+		const width = Math.min(this.parsedData.width || 400, 350);
+		const height = Math.min(this.parsedData.height || 300, 280);
+		const color = this.parsedData.color || 'steelblue';
+
+		// Get the template from the plugin if available
+		const templates = this.plugin.getTemplates();
+		if (templates[this.currentVisualizationType]) {
+			// Use the existing template and replace data/dimensions for preview
+			let templateCode = templates[this.currentVisualizationType];
+			
+			// For complex chart types, just use the template as-is without data replacement
+			const templateOnlyTypes = ['histogram', 'heatmap', 'timeline', 'radar', 'box-plot', 'bubble-chart', 'stacked-bar-chart'];
+			const simpleDataTypes = ['bar-chart', 'horizontal-bar', 'pie-chart', 'donut-chart'];
+			
+			if (!templateOnlyTypes.includes(this.currentVisualizationType) && data.length > 0 && simpleDataTypes.includes(this.currentVisualizationType)) {
+				const dataString = JSON.stringify(data);
+				// Replace the data array in the template, but be more specific about the pattern
+				templateCode = templateCode.replace(/const data = \[\s*\{[^}]*name[^}]*\}[\s\S]*?\];/, `const data = ${dataString};`);
+			}
+			
+			// Replace dimensions with preview dimensions - be more careful
+			templateCode = templateCode.replace(/(?:width|height)\s*=\s*\d+/g, (match) => {
+				if (match.includes('width')) return `width = ${width}`;
+				if (match.includes('height')) return `height = ${height}`;
+				return match;
+			});
+			
+			// Replace color references if possible, but only for simple cases
+			if (color.startsWith('#')) {
+				templateCode = templateCode.replace(/utils\.colors\[0\]/g, `"${color}"`);
+				templateCode = templateCode.replace(/\.style\("fill",\s*"steelblue"\)/g, `.style("fill", "${color}")`);
+			}
+			
+			return templateCode;
+		}
+
+		// Fallback to custom generation for basic types
+
+		if (this.currentVisualizationType === 'bar-chart') {
+			return `
+const margin = {top: 20, right: 20, bottom: 50, left: 40};
+const innerWidth = ${width} - margin.left - margin.right;
+const innerHeight = ${height} - margin.top - margin.bottom;
+
+const data = ${JSON.stringify(data)};
+
+const svg = d3.select(container)
+  .append('svg')
+  .attr('width', ${width})
+  .attr('height', ${height});
+
+const g = svg.append('g')
+  .attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+const x = d3.scaleBand()
+  .domain(data.map(d => d.label))
+  .range([0, innerWidth])
+  .padding(0.1);
+
+const y = d3.scaleLinear()
+  .domain([0, d3.max(data, d => d.value)])
+  .range([innerHeight, 0]);
+
+g.selectAll('.bar')
+  .data(data)
+  .enter().append('rect')
+  .attr('class', 'bar')
+  .attr('x', d => x(d.label))
+  .attr('y', d => y(d.value))
+  .attr('width', x.bandwidth())
+  .attr('height', d => innerHeight - y(d.value))
+  .attr('fill', '${color}');
+
+g.append('g')
+  .attr('class', 'axis axis--x')
+  .attr('transform', \`translate(0,\${innerHeight})\`)
+  .call(d3.axisBottom(x));
+
+g.append('g')
+  .attr('class', 'axis axis--y')
+  .call(d3.axisLeft(y));
+			`;
+		} else if (this.currentVisualizationType === 'line-chart') {
+			return `
+const margin = {top: 20, right: 20, bottom: 50, left: 40};
+const innerWidth = ${width} - margin.left - margin.right;
+const innerHeight = ${height} - margin.top - margin.bottom;
+
+const data = ${JSON.stringify(data)};
+
+const svg = d3.select(container)
+  .append('svg')
+  .attr('width', ${width})
+  .attr('height', ${height});
+
+const g = svg.append('g')
+  .attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+const x = d3.scaleLinear()
+  .domain(d3.extent(data, (d, i) => i))
+  .range([0, innerWidth]);
+
+const y = d3.scaleLinear()
+  .domain(d3.extent(data, d => d.value))
+  .range([innerHeight, 0]);
+
+const line = d3.line()
+  .x((d, i) => x(i))
+  .y(d => y(d.value))
+  .curve(d3.curveMonotoneX);
+
+g.append('path')
+  .datum(data)
+  .attr('fill', 'none')
+  .attr('stroke', '${color}')
+  .attr('stroke-width', 2)
+  .attr('d', line);
+
+g.selectAll('.dot')
+  .data(data)
+  .enter().append('circle')
+  .attr('class', 'dot')
+  .attr('cx', (d, i) => x(i))
+  .attr('cy', d => y(d.value))
+  .attr('r', 4)
+  .attr('fill', '${color}');
+
+g.append('g')
+  .attr('transform', \`translate(0,\${innerHeight})\`)
+  .call(d3.axisBottom(x));
+
+g.append('g')
+  .call(d3.axisLeft(y));
+			`;
+		} else if (this.currentVisualizationType === 'pie-chart') {
+			return `
+const radius = Math.min(${width}, ${height}) / 2 - 20;
+const data = ${JSON.stringify(data)};
+
+const svg = d3.select(container)
+  .append('svg')
+  .attr('width', ${width})
+  .attr('height', ${height});
+
+const g = svg.append('g')
+  .attr('transform', \`translate(\${${width}/2},\${${height}/2})\`);
+
+const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+const pie = d3.pie()
+  .value(d => d.value);
+
+const arc = d3.arc()
+  .innerRadius(0)
+  .outerRadius(radius);
+
+const arcs = g.selectAll('.arc')
+  .data(pie(data))
+  .enter().append('g')
+  .attr('class', 'arc');
+
+arcs.append('path')
+  .attr('d', arc)
+  .attr('fill', (d, i) => color(i));
+
+arcs.append('text')
+  .attr('transform', d => \`translate(\${arc.centroid(d)})\`)
+  .attr('text-anchor', 'middle')
+  .text(d => d.data.label);
+			`;
+		} else if (this.currentVisualizationType === 'scatter-plot') {
+			return `
+const margin = {top: 20, right: 20, bottom: 50, left: 40};
+const innerWidth = ${width} - margin.left - margin.right;
+const innerHeight = ${height} - margin.top - margin.bottom;
+
+const data = ${JSON.stringify(data)};
+
+const svg = d3.select(container)
+  .append('svg')
+  .attr('width', ${width})
+  .attr('height', ${height});
+
+const g = svg.append('g')
+  .attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+const x = d3.scaleLinear()
+  .domain(d3.extent(data, (d, i) => i))
+  .range([0, innerWidth]);
+
+const y = d3.scaleLinear()
+  .domain(d3.extent(data, d => d.value))
+  .range([innerHeight, 0]);
+
+g.selectAll('.dot')
+  .data(data)
+  .enter().append('circle')
+  .attr('class', 'dot')
+  .attr('cx', (d, i) => x(i))
+  .attr('cy', d => y(d.value))
+  .attr('r', 6)
+  .attr('fill', '${color}')
+  .attr('opacity', 0.7);
+
+g.append('g')
+  .attr('transform', \`translate(0,\${innerHeight})\`)
+  .call(d3.axisBottom(x));
+
+g.append('g')
+  .call(d3.axisLeft(y));
+			`;
+		} else if (this.currentVisualizationType === 'area-chart') {
+			return `
+const margin = {top: 20, right: 20, bottom: 50, left: 40};
+const innerWidth = ${width} - margin.left - margin.right;
+const innerHeight = ${height} - margin.top - margin.bottom;
+
+const data = ${JSON.stringify(data)};
+
+const svg = d3.select(container)
+  .append('svg')
+  .attr('width', ${width})
+  .attr('height', ${height});
+
+const g = svg.append('g')
+  .attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+const x = d3.scaleLinear()
+  .domain(d3.extent(data, (d, i) => i))
+  .range([0, innerWidth]);
+
+const y = d3.scaleLinear()
+  .domain([0, d3.max(data, d => d.value)])
+  .range([innerHeight, 0]);
+
+const area = d3.area()
+  .x((d, i) => x(i))
+  .y0(innerHeight)
+  .y1(d => y(d.value))
+  .curve(d3.curveMonotoneX);
+
+g.append('path')
+  .datum(data)
+  .attr('fill', '${color}')
+  .attr('opacity', 0.7)
+  .attr('d', area);
+
+g.append('g')
+  .attr('transform', \`translate(0,\${innerHeight})\`)
+  .call(d3.axisBottom(x));
+
+g.append('g')
+  .call(d3.axisLeft(y));
+			`;
+		}
+
+		return '// Chart type not implemented yet';
+	}
+
+	private generateFinalCode(): string {
+		const data = this.parsedData.data;
+		// Use full dimensions for final output
+		const width = this.parsedData.width || 600;
+		const height = this.parsedData.height || 400;
+		const color = this.parsedData.color || 'steelblue';
+
+		// Get the template from the plugin if available
+		const templates = this.plugin.getTemplates();
+		if (templates[this.currentVisualizationType]) {
+			// Use the existing template and replace data
+			let templateCode = templates[this.currentVisualizationType];
+			
+			// For complex chart types, just use the template as-is without data replacement
+			const templateOnlyTypes = ['histogram', 'heatmap', 'timeline', 'radar', 'box-plot', 'bubble-chart', 'stacked-bar-chart'];
+			const simpleDataTypes = ['bar-chart', 'horizontal-bar', 'pie-chart', 'donut-chart'];
+			
+			if (!templateOnlyTypes.includes(this.currentVisualizationType) && data.length > 0 && simpleDataTypes.includes(this.currentVisualizationType)) {
+				const dataString = JSON.stringify(data);
+				// Replace the data array in the template, but be more specific about the pattern
+				templateCode = templateCode.replace(/const data = \[\s*\{[^}]*name[^}]*\}[\s\S]*?\];/, `const data = ${dataString};`);
+			}
+			
+			// Replace dimensions if they appear in template - be more careful
+			templateCode = templateCode.replace(/(?:width|height)\s*=\s*\d+/g, (match) => {
+				if (match.includes('width')) return `width = ${width}`;
+				if (match.includes('height')) return `height = ${height}`;
+				return match;
+			});
+			
+			// Replace color references if possible, but only for simple cases
+			if (color.startsWith('#')) {
+				templateCode = templateCode.replace(/utils\.colors\[0\]/g, `"${color}"`);
+				templateCode = templateCode.replace(/\.style\("fill",\s*"steelblue"\)/g, `.style("fill", "${color}")`);
+			}
+			
+			return templateCode;
+		}
+
+		// Fallback to custom generation for basic types
+
+		if (this.currentVisualizationType === 'bar-chart') {
+			return `
+const margin = {top: 20, right: 20, bottom: 50, left: 40};
+const innerWidth = ${width} - margin.left - margin.right;
+const innerHeight = ${height} - margin.top - margin.bottom;
+
+const data = ${JSON.stringify(data)};
+
+const svg = d3.select(container)
+  .append('svg')
+  .attr('width', ${width})
+  .attr('height', ${height});
+
+const g = svg.append('g')
+  .attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+const x = d3.scaleBand()
+  .domain(data.map(d => d.label))
+  .range([0, innerWidth])
+  .padding(0.1);
+
+const y = d3.scaleLinear()
+  .domain([0, d3.max(data, d => d.value)])
+  .range([innerHeight, 0]);
+
+g.selectAll('.bar')
+  .data(data)
+  .enter().append('rect')
+  .attr('class', 'bar')
+  .attr('x', d => x(d.label))
+  .attr('y', d => y(d.value))
+  .attr('width', x.bandwidth())
+  .attr('height', d => innerHeight - y(d.value))
+  .attr('fill', '${color}');
+
+g.append('g')
+  .attr('class', 'axis axis--x')
+  .attr('transform', \`translate(0,\${innerHeight})\`)
+  .call(d3.axisBottom(x));
+
+g.append('g')
+  .attr('class', 'axis axis--y')
+  .call(d3.axisLeft(y));
+			`;
+		} else if (this.currentVisualizationType === 'line-chart') {
+			return `
+const margin = {top: 20, right: 20, bottom: 50, left: 40};
+const innerWidth = ${width} - margin.left - margin.right;
+const innerHeight = ${height} - margin.top - margin.bottom;
+
+const data = ${JSON.stringify(data)};
+
+const svg = d3.select(container)
+  .append('svg')
+  .attr('width', ${width})
+  .attr('height', ${height});
+
+const g = svg.append('g')
+  .attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+const x = d3.scaleLinear()
+  .domain(d3.extent(data, (d, i) => i))
+  .range([0, innerWidth]);
+
+const y = d3.scaleLinear()
+  .domain(d3.extent(data, d => d.value))
+  .range([innerHeight, 0]);
+
+const line = d3.line()
+  .x((d, i) => x(i))
+  .y(d => y(d.value))
+  .curve(d3.curveMonotoneX);
+
+g.append('path')
+  .datum(data)
+  .attr('fill', 'none')
+  .attr('stroke', '${color}')
+  .attr('stroke-width', 2)
+  .attr('d', line);
+
+g.selectAll('.dot')
+  .data(data)
+  .enter().append('circle')
+  .attr('class', 'dot')
+  .attr('cx', (d, i) => x(i))
+  .attr('cy', d => y(d.value))
+  .attr('r', 4)
+  .attr('fill', '${color}');
+
+g.append('g')
+  .attr('transform', \`translate(0,\${innerHeight})\`)
+  .call(d3.axisBottom(x));
+
+g.append('g')
+  .call(d3.axisLeft(y));
+			`;
+		} else if (this.currentVisualizationType === 'pie-chart') {
+			return `
+const radius = Math.min(${width}, ${height}) / 2 - 20;
+const data = ${JSON.stringify(data)};
+
+const svg = d3.select(container)
+  .append('svg')
+  .attr('width', ${width})
+  .attr('height', ${height});
+
+const g = svg.append('g')
+  .attr('transform', \`translate(\${${width}/2},\${${height}/2})\`);
+
+const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+const pie = d3.pie()
+  .value(d => d.value);
+
+const arc = d3.arc()
+  .innerRadius(0)
+  .outerRadius(radius);
+
+const arcs = g.selectAll('.arc')
+  .data(pie(data))
+  .enter().append('g')
+  .attr('class', 'arc');
+
+arcs.append('path')
+  .attr('d', arc)
+  .attr('fill', (d, i) => color(i));
+
+arcs.append('text')
+  .attr('transform', d => \`translate(\${arc.centroid(d)})\`)
+  .attr('text-anchor', 'middle')
+  .text(d => d.data.label);
+			`;
+		} else if (this.currentVisualizationType === 'scatter-plot') {
+			return `
+const margin = {top: 20, right: 20, bottom: 50, left: 40};
+const innerWidth = ${width} - margin.left - margin.right;
+const innerHeight = ${height} - margin.top - margin.bottom;
+
+const data = ${JSON.stringify(data)};
+
+const svg = d3.select(container)
+  .append('svg')
+  .attr('width', ${width})
+  .attr('height', ${height});
+
+const g = svg.append('g')
+  .attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+const x = d3.scaleLinear()
+  .domain(d3.extent(data, (d, i) => i))
+  .range([0, innerWidth]);
+
+const y = d3.scaleLinear()
+  .domain(d3.extent(data, d => d.value))
+  .range([innerHeight, 0]);
+
+g.selectAll('.dot')
+  .data(data)
+  .enter().append('circle')
+  .attr('class', 'dot')
+  .attr('cx', (d, i) => x(i))
+  .attr('cy', d => y(d.value))
+  .attr('r', 6)
+  .attr('fill', '${color}')
+  .attr('opacity', 0.7);
+
+g.append('g')
+  .attr('transform', \`translate(0,\${innerHeight})\`)
+  .call(d3.axisBottom(x));
+
+g.append('g')
+  .call(d3.axisLeft(y));
+			`;
+		} else if (this.currentVisualizationType === 'area-chart') {
+			return `
+const margin = {top: 20, right: 20, bottom: 50, left: 40};
+const innerWidth = ${width} - margin.left - margin.right;
+const innerHeight = ${height} - margin.top - margin.bottom;
+
+const data = ${JSON.stringify(data)};
+
+const svg = d3.select(container)
+  .append('svg')
+  .attr('width', ${width})
+  .attr('height', ${height});
+
+const g = svg.append('g')
+  .attr('transform', \`translate(\${margin.left},\${margin.top})\`);
+
+const x = d3.scaleLinear()
+  .domain(d3.extent(data, (d, i) => i))
+  .range([0, innerWidth]);
+
+const y = d3.scaleLinear()
+  .domain([0, d3.max(data, d => d.value)])
+  .range([innerHeight, 0]);
+
+const area = d3.area()
+  .x((d, i) => x(i))
+  .y0(innerHeight)
+  .y1(d => y(d.value))
+  .curve(d3.curveMonotoneX);
+
+g.append('path')
+  .datum(data)
+  .attr('fill', '${color}')
+  .attr('opacity', 0.7)
+  .attr('d', area);
+
+g.append('g')
+  .attr('transform', \`translate(0,\${innerHeight})\`)
+  .call(d3.axisBottom(x));
+
+g.append('g')
+  .call(d3.axisLeft(y));
+			`;
+		}
+
+		return '// Chart type not implemented yet';
+	}
+
+	private applyChanges() {
+		const generatedCode = this.generateFinalCode();
+		
+		// Find the current file and update the code block
+		const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (activeView && activeView.editor) {
+			// This is a simplified approach - in a real implementation,
+			// you'd need to locate the specific code block and replace it
+			new Notice('Code generation complete! Please manually replace your d3 code block with the generated code.');
+			
+			// Copy to clipboard for now
+			navigator.clipboard.writeText(generatedCode);
+			new Notice('Generated code copied to clipboard');
+		}
+		
 		this.close();
 	}
 
