@@ -1,0 +1,28 @@
+{
+  "name": "Company",
+  "children": [
+    {
+      "name": "Engineering",
+      "children": [
+        {"name": "Frontend Team", "value": 12},
+        {"name": "Backend Team", "value": 8},
+        {"name": "DevOps Team", "value": 5}
+      ]
+    },
+    {
+      "name": "Marketing",
+      "children": [
+        {"name": "Content Team", "value": 6},
+        {"name": "Social Media", "value": 4},
+        {"name": "Analytics", "value": 3}
+      ]
+    },
+    {
+      "name": "Sales",
+      "children": [
+        {"name": "Enterprise", "value": 10},
+        {"name": "SMB", "value": 8}
+      ]
+    }
+  ]
+}

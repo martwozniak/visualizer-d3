@@ -1,0 +1,12 @@
+[
+  {"x": 10, "y": 20, "size": 5, "color": "red"},
+  {"x": 25, "y": 35, "size": 8, "color": "blue"},
+  {"x": 40, "y": 15, "size": 12, "color": "green"},
+  {"x": 55, "y": 50, "size": 6, "color": "orange"},
+  {"x": 70, "y": 30, "size": 10, "color": "purple"},
+  {"x": 85, "y": 45, "size": 7, "color": "yellow"},
+  {"x": 15, "y": 60, "size": 9, "color": "pink"},
+  {"x": 30, "y": 25, "size": 11, "color": "brown"},
+  {"x": 45, "y": 40, "size": 4, "color": "gray"},
+  {"x": 60, "y": 55, "size": 13, "color": "black"}
+]
