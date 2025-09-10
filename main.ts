@@ -8,6 +8,23 @@ interface D3VisualizerSettings {
 	allowDataLoading: boolean;
 }
 
+interface Margin {
+	top: number;
+	right: number;
+	bottom: number;
+	left: number;
+}
+
+interface D3Template {
+	key: string;
+	name: string;
+	icon: string;
+	category: string;
+	description: string;
+	tags: string[];
+	code: string;
+}
+
 const DEFAULT_SETTINGS: D3VisualizerSettings = {
 	defaultWidth: 600,
 	defaultHeight: 400,
@@ -86,38 +103,14 @@ export default class D3VisualizerPlugin extends Plugin {
 
 	private processD3CodeBlock(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) {
 		const wrapper = el.createDiv('d3-visualization-wrapper');
-		wrapper.style.position = 'relative';
-		wrapper.style.width = '100%';
-		wrapper.style.marginBottom = '10px';
 
 		// Create control toolbar
 		const toolbar = wrapper.createDiv('d3-control-toolbar');
-		toolbar.style.position = 'absolute';
-		toolbar.style.top = '8px';
-		toolbar.style.left = '8px';
-		toolbar.style.zIndex = '10';
-		toolbar.style.display = 'flex';
-		toolbar.style.gap = '4px';
 
 		// Add pen icon for graphical editor
 		const editBtn = toolbar.createEl('button', { cls: 'd3-edit-btn' });
-		editBtn.innerHTML = '✏️';
+		editBtn.textContent = '✏️';
 		editBtn.title = 'Edit visualization graphically';
-		editBtn.style.background = 'var(--background-primary)';
-		editBtn.style.border = '1px solid var(--background-modifier-border)';
-		editBtn.style.borderRadius = '4px';
-		editBtn.style.padding = '4px 8px';
-		editBtn.style.cursor = 'pointer';
-		editBtn.style.fontSize = '14px';
-		editBtn.style.opacity = '0.7';
-		editBtn.style.transition = 'opacity 0.2s';
-
-		editBtn.addEventListener('mouseenter', () => {
-			editBtn.style.opacity = '1';
-		});
-		editBtn.addEventListener('mouseleave', () => {
-			editBtn.style.opacity = '0.7';
-		});
 
 		editBtn.addEventListener('click', () => {
 			// Hide the original visualization while editing
@@ -130,23 +123,8 @@ export default class D3VisualizerPlugin extends Plugin {
 
 		// Add code view icon
 		const codeBtn = toolbar.createEl('button', { cls: 'd3-code-btn' });
-		codeBtn.innerHTML = '📝';
+		codeBtn.textContent = '📝';
 		codeBtn.title = 'View source code';
-		codeBtn.style.background = 'var(--background-primary)';
-		codeBtn.style.border = '1px solid var(--background-modifier-border)';
-		codeBtn.style.borderRadius = '4px';
-		codeBtn.style.padding = '4px 8px';
-		codeBtn.style.cursor = 'pointer';
-		codeBtn.style.fontSize = '14px';
-		codeBtn.style.opacity = '0.7';
-		codeBtn.style.transition = 'opacity 0.2s';
-
-		codeBtn.addEventListener('mouseenter', () => {
-			codeBtn.style.opacity = '1';
-		});
-		codeBtn.addEventListener('mouseleave', () => {
-			codeBtn.style.opacity = '0.7';
-		});
 
 		codeBtn.addEventListener('click', () => {
 			this.showCodeViewer(source, ctx);
@@ -154,11 +132,7 @@ export default class D3VisualizerPlugin extends Plugin {
 
 		// Create visualization container
 		const container = wrapper.createDiv('d3-visualization-container');
-		container.style.width = '100%';
 		container.style.minHeight = `${this.settings.defaultHeight}px`;
-		container.style.border = '1px solid var(--background-modifier-border)';
-		container.style.borderRadius = '4px';
-		container.style.padding = '10px';
 
 		try {
 			this.executeD3Code(source, container);
@@ -231,7 +205,7 @@ export default class D3VisualizerPlugin extends Plugin {
 
 	private createUtilities() {
 		return {
-			responsive: (svg: any, aspect: number = 16/9) => {
+			responsive: (svg: d3.Selection<SVGSVGElement, unknown, null, undefined>, aspect: number = 16/9) => {
 				svg.attr('viewBox', `0 0 ${this.settings.defaultWidth} ${this.settings.defaultHeight}`)
 					.attr('preserveAspectRatio', 'xMinYMin meet')
 					.style('width', '100%')
@@ -241,8 +215,8 @@ export default class D3VisualizerPlugin extends Plugin {
 			margin: (top: number = 20, right: number = 20, bottom: number = 30, left: number = 40) => {
 				return { top, right, bottom, left };
 			},
-			innerWidth: (width: number, margin: any) => width - margin.left - margin.right,
-			innerHeight: (height: number, margin: any) => height - margin.top - margin.bottom,
+			innerWidth: (width: number, margin: Margin) => width - margin.left - margin.right,
+			innerHeight: (height: number, margin: Margin) => height - margin.top - margin.bottom,
 			colors: d3.schemeCategory10,
 			formatNumber: d3.format(','),
 			formatPercent: d3.format('.1%'),
@@ -251,24 +225,15 @@ export default class D3VisualizerPlugin extends Plugin {
 		};
 	}
 
-	private displayError(container: HTMLElement, error: any) {
+	private displayError(container: HTMLElement, error: Error) {
 		if (!this.settings.enableErrorDisplay) {
 			return;
 		}
 
 		container.empty();
 		const errorDiv = container.createDiv('d3-error-display');
-		errorDiv.style.color = 'var(--text-error)';
-		errorDiv.style.backgroundColor = 'var(--background-modifier-error)';
-		errorDiv.style.padding = '10px';
-		errorDiv.style.borderRadius = '4px';
-		errorDiv.style.fontFamily = 'var(--font-monospace)';
-		errorDiv.style.fontSize = '0.9em';
-		errorDiv.style.whiteSpace = 'pre-wrap';
 
-		const errorTitle = errorDiv.createDiv();
-		errorTitle.style.fontWeight = 'bold';
-		errorTitle.style.marginBottom = '5px';
+		const errorTitle = errorDiv.createDiv('d3-error-title');
 		errorTitle.textContent = 'D3 Visualization Error:';
 
 		const errorMessage = errorDiv.createDiv();
@@ -3214,8 +3179,8 @@ class D3TemplateBrowserModal extends Modal {
 	private modalActions: HTMLElement;
 	private insertBtn: HTMLButtonElement;
 	private cancelBtn: HTMLButtonElement;
-	private selectedTemplate: any = null;
-	private templates: any[];
+	private selectedTemplate: D3Template | null = null;
+	private templates: D3Template[];
 	private currentView: 'templates' | 'preview' = 'templates';
 
 	constructor(app: App, editor: Editor, plugin: D3VisualizerPlugin) {
@@ -3235,7 +3200,12 @@ class D3TemplateBrowserModal extends Modal {
 		header.createEl('h2', { text: 'D3.js Template Browser' });
 		header.createEl('p', { text: 'Choose a visualization template to get started', cls: 'modal-subtitle' });
 		const credit = header.createEl('p', { cls: 'modal-credit' });
-		credit.innerHTML = 'Additional templates inspired by <a href="https://github.com/biovisualize/d3visualization" target="_blank">biovisualize/d3visualization</a>';
+		credit.appendText('Additional templates inspired by ');
+		const link = credit.createEl('a', {
+			href: 'https://github.com/biovisualize/d3visualization',
+			text: 'biovisualize/d3visualization'
+		});
+		link.setAttribute('target', '_blank');
 
 		// Search and filter controls
 		const controls = contentEl.createDiv('template-controls');
@@ -3319,13 +3289,10 @@ class D3TemplateBrowserModal extends Modal {
 
 		if (templates.length === 0) {
 			const noResults = this.templatesContainer.createDiv('no-results');
-			noResults.innerHTML = `
-				<div class="no-results-content">
-					<span class="no-results-icon">🔍</span>
-					<p>No templates found</p>
-					<small>Try a different search term or category</small>
-				</div>
-			`;
+			const noResultsContent = noResults.createDiv('no-results-content');
+			noResultsContent.createEl('span', { text: '🔍', cls: 'no-results-icon' });
+			noResultsContent.createEl('p', { text: 'No templates found' });
+			noResultsContent.createEl('small', { text: 'Try a different search term or category' });
 			return;
 		}
 
@@ -3336,14 +3303,13 @@ class D3TemplateBrowserModal extends Modal {
 				templateCard.addClass('selected');
 			}
 
-			templateCard.innerHTML = `
-				<div class="template-icon">${template.icon}</div>
-				<div class="template-info">
-					<div class="template-name">${template.name}</div>
-					<div class="template-description">${template.description}</div>
-					<div class="template-category">${template.category}</div>
-				</div>
-			`;
+			const templateIcon = templateCard.createDiv('template-icon');
+			templateIcon.textContent = template.icon;
+			
+			const templateInfo = templateCard.createDiv('template-info');
+			templateInfo.createDiv({ text: template.name, cls: 'template-name' });
+			templateInfo.createDiv({ text: template.description, cls: 'template-description' });
+			templateInfo.createDiv({ text: template.category, cls: 'template-category' });
 
 			templateCard.addEventListener('click', () => {
 				// Remove selection from other cards
@@ -3365,7 +3331,7 @@ class D3TemplateBrowserModal extends Modal {
 		});
 	}
 
-	private showPreviewPage(template: any) {
+	private showPreviewPage(template: D3Template) {
 		// Hide templates section and show preview section
 		this.templatesSection.style.display = 'none';
 		this.previewSection.addClass('active');
@@ -3388,13 +3354,10 @@ class D3TemplateBrowserModal extends Modal {
 		backBtn.addEventListener('click', () => this.showTemplatesPage());
 		
 		const previewHeader = this.previewContainer.createDiv('preview-header');
-		previewHeader.innerHTML = `
-			<div class="preview-title">
-				<span class="preview-template-icon">${template.icon}</span>
-				<span class="preview-template-name">${template.name}</span>
-			</div>
-			<div class="preview-category">${template.category}</div>
-		`;
+		const previewTitle = previewHeader.createDiv('preview-title');
+		previewTitle.createEl('span', { text: template.icon, cls: 'preview-template-icon' });
+		previewTitle.createEl('span', { text: template.name, cls: 'preview-template-name' });
+		previewHeader.createDiv({ text: template.category, cls: 'preview-category' });
 
 		const previewDescription = this.previewContainer.createDiv('preview-description');
 		previewDescription.textContent = template.description;
@@ -3414,23 +3377,19 @@ class D3TemplateBrowserModal extends Modal {
 			const codeLines = templateCode.split('\n').slice(0, 10); // First 10 lines
 			const truncatedCode = codeLines.join('\n') + (templateCode.split('\n').length > 10 ? '\n...' : '');
 			
-			codePreview.innerHTML = `
-				<div class="code-preview-header">Code Preview:</div>
-				<pre class="code-preview-content"><code>${truncatedCode}</code></pre>
-			`;
+			codePreview.createDiv({ text: 'Code Preview:', cls: 'code-preview-header' });
+			const preEl = codePreview.createEl('pre', { cls: 'code-preview-content' });
+			preEl.createEl('code', { text: truncatedCode });
 		}
 
 		// Usage tips
 		const usageTips = this.previewContainer.createDiv('usage-tips');
-		usageTips.innerHTML = `
-			<div class="tips-header">💡 Usage Tips:</div>
-			<ul class="tips-list">
-				<li>Click "Insert Template" to add to your note</li>
-				<li>Customize the sample data for your needs</li>
-				<li>Use the available utils for responsive design</li>
-				<li>Load external data with loadData functions</li>
-			</ul>
-		`;
+		usageTips.createDiv({ text: '💡 Usage Tips:', cls: 'tips-header' });
+		const tipsList = usageTips.createEl('ul', { cls: 'tips-list' });
+		tipsList.createEl('li', { text: 'Click "Insert Template" to add to your note' });
+		tipsList.createEl('li', { text: 'Customize the sample data for your needs' });
+		tipsList.createEl('li', { text: 'Use the available utils for responsive design' });
+		tipsList.createEl('li', { text: 'Load external data with loadData functions' });
 	}
 	
 	private showTemplatesPage() {
@@ -3644,14 +3603,10 @@ class D3CodeEditor extends Modal {
 			const currentCode = this.codeTextarea.value;
 			this.plugin.executeD3Code(currentCode, this.previewContainer);
 		} catch (error) {
-			const errorDiv = this.previewContainer.createDiv();
-			errorDiv.style.color = 'var(--text-error)';
-			errorDiv.style.backgroundColor = 'var(--background-modifier-error)';
-			errorDiv.style.padding = '12px';
-			errorDiv.style.borderRadius = '4px';
-			errorDiv.style.fontFamily = 'var(--font-monospace)';
-			errorDiv.style.fontSize = '12px';
-			errorDiv.innerHTML = `<strong>Error:</strong><br>${error.toString()}`;
+			const errorDiv = this.previewContainer.createDiv('d3-error-display');
+			errorDiv.createEl('strong', { text: 'Error:' });
+			errorDiv.createEl('br');
+			errorDiv.appendText(error.toString());
 		}
 	}
 
@@ -3683,7 +3638,7 @@ class D3GraphicalEditor extends Modal {
 	plugin: D3VisualizerPlugin;
 	source: string;
 	ctx: MarkdownPostProcessorContext;
-	parsedData: any;
+	parsedData: { type?: string; data: unknown[]; width?: number; height?: number; color?: string };
 	currentVisualizationType: string;
 	previewContainer: HTMLElement;
 
@@ -4127,8 +4082,8 @@ class D3GraphicalEditor extends Modal {
 		}
 	}
 
-	private extractSimpleDataArray(dataString: string): any[] {
-		const result: any[] = [];
+	private extractSimpleDataArray(dataString: string): unknown[] {
+		const result: unknown[] = [];
 		// Simple regex-based extraction for basic data patterns
 		const objectMatches = dataString.match(/\{[^}]*\}/g);
 		if (objectMatches) {
@@ -4152,7 +4107,7 @@ class D3GraphicalEditor extends Modal {
 		return result;
 	}
 
-	private parseVisualizationData(): any {
+	private parseVisualizationData(): { type?: string; data: unknown[]; width?: number; height?: number; color?: string } {
 		try {
 			const code = this.source;
 			let parsedData = {
