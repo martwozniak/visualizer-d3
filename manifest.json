@@ -1,7 +1,7 @@
 {
 	"id": "visualizer-d3",
 	"name": "D3.js Visualizer",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"minAppVersion": "0.15.0",
 	"description": "Create interactive D3.js visualizations directly in your Obsidian notes using code blocks.",
 	"author": "D3 Visualizer Team",
