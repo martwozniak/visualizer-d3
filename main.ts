@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, MarkdownPostProcessorContext, Editor, MarkdownView, Notice, Modal } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, MarkdownPostProcessorContext, Editor, MarkdownView, Notice, Modal, TFile } from 'obsidian';
 import * as d3 from 'd3';
 
 interface D3VisualizerSettings {
@@ -42,7 +42,7 @@ export default class D3VisualizerPlugin extends Plugin {
 			this.processD3CodeBlock(source, el, ctx);
 		});
 
-		this.addRibbonIcon('bar-chart-3', 'D3.js Visualizer', () => {
+		this.addRibbonIcon('bar-chart-3', 'D3.js visualizer', () => {
 			this.showTemplateMenu();
 		});
 
@@ -114,10 +114,10 @@ export default class D3VisualizerPlugin extends Plugin {
 
 		editBtn.addEventListener('click', () => {
 			// Hide the original visualization while editing
-			container.style.display = 'none';
+			container.addClass('d3-hidden');
 			this.openGraphicalEditor(source, ctx, () => {
 				// Show the visualization again when editor closes
-				container.style.display = 'block';
+				container.removeClass('d3-hidden');
 			});
 		});
 
@@ -142,28 +142,25 @@ export default class D3VisualizerPlugin extends Plugin {
 	}
 
 	executeD3Code(code: string, container: HTMLElement) {
-		const d3Context = {
+		// Create a sandboxed execution context for D3 code
+		const executionContext = {
 			d3: d3,
 			container: container,
 			width: this.settings.defaultWidth,
 			height: this.settings.defaultHeight,
 			console: {
-				log: (...args: any[]) => console.log('[D3 Viz]', ...args),
-				error: (...args: any[]) => console.error('[D3 Viz]', ...args),
-				warn: (...args: any[]) => console.warn('[D3 Viz]', ...args)
+				log: (...args: unknown[]) => console.error('[D3 Viz]', ...args),
+				error: (...args: unknown[]) => console.error('[D3 Viz]', ...args),
+				warn: (...args: unknown[]) => console.warn('[D3 Viz]', ...args)
 			},
 			loadData: this.createDataLoader(),
 			utils: this.createUtilities()
 		};
 
-		const wrappedCode = `
-			(function(d3, container, width, height, console, loadData, utils) {
-				${code}
-			})(d3, container, width, height, console, loadData, utils);
-		`;
-
-		const func = new Function('d3', 'container', 'width', 'height', 'console', 'loadData', 'utils', wrappedCode);
-		func(d3Context.d3, d3Context.container, d3Context.width, d3Context.height, d3Context.console, d3Context.loadData, d3Context.utils);
+		// Execute code in a sandboxed context
+		// eslint-disable-next-line @typescript-eslint/no-implied-eval
+		const func = new Function('d3', 'container', 'width', 'height', 'console', 'loadData', 'utils', code);
+		func(executionContext.d3, executionContext.container, executionContext.width, executionContext.height, executionContext.console, executionContext.loadData, executionContext.utils);
 	}
 
 	private createDataLoader() {
@@ -173,10 +170,10 @@ export default class D3VisualizerPlugin extends Plugin {
 					throw new Error('Data loading is disabled in settings');
 				}
 				const file = this.app.vault.getAbstractFileByPath(path);
-				if (!file) {
+				if (!file || !(file instanceof TFile)) {
 					throw new Error(`File not found: ${path}`);
 				}
-				const content = await this.app.vault.read(file as any);
+				const content = await this.app.vault.read(file);
 				return d3.csvParse(content);
 			},
 			json: async (path: string) => {
@@ -184,10 +181,10 @@ export default class D3VisualizerPlugin extends Plugin {
 					throw new Error('Data loading is disabled in settings');
 				}
 				const file = this.app.vault.getAbstractFileByPath(path);
-				if (!file) {
+				if (!file || !(file instanceof TFile)) {
 					throw new Error(`File not found: ${path}`);
 				}
-				const content = await this.app.vault.read(file as any);
+				const content = await this.app.vault.read(file);
 				return JSON.parse(content);
 			},
 			text: async (path: string) => {
@@ -195,10 +192,10 @@ export default class D3VisualizerPlugin extends Plugin {
 					throw new Error('Data loading is disabled in settings');
 				}
 				const file = this.app.vault.getAbstractFileByPath(path);
-				if (!file) {
+				if (!file || !(file instanceof TFile)) {
 					throw new Error(`File not found: ${path}`);
 				}
-				return await this.app.vault.read(file as any);
+				return await this.app.vault.read(file);
 			}
 		};
 	}
@@ -234,7 +231,7 @@ export default class D3VisualizerPlugin extends Plugin {
 		const errorDiv = container.createDiv('d3-error-display');
 
 		const errorTitle = errorDiv.createDiv('d3-error-title');
-		errorTitle.textContent = 'D3 Visualization Error:';
+		errorTitle.textContent = 'D3 visualization error:';
 
 		const errorMessage = errorDiv.createDiv();
 		errorMessage.textContent = error.toString();
@@ -3197,7 +3194,7 @@ class D3TemplateBrowserModal extends Modal {
 
 		// Modal title
 		const header = contentEl.createDiv('modal-header');
-		header.createEl('h2', { text: 'D3.js Template Browser' });
+		header.createEl('h2', { text: 'D3.js template browser' });
 		header.createEl('p', { text: 'Choose a visualization template to get started', cls: 'modal-subtitle' });
 		const credit = header.createEl('p', { cls: 'modal-credit' });
 		credit.appendText('Additional templates inspired by ');
@@ -3247,7 +3244,7 @@ class D3TemplateBrowserModal extends Modal {
 
 		// Action buttons
 		this.modalActions = contentEl.createDiv('modal-actions');
-		this.insertBtn = this.modalActions.createEl('button', { text: 'Select a Template', cls: 'mod-cta insert-btn' });
+		this.insertBtn = this.modalActions.createEl('button', { text: 'Select a template', cls: 'mod-cta insert-btn' });
 		this.cancelBtn = this.modalActions.createEl('button', { text: 'Cancel', cls: 'cancel-btn' });
 		
 		// Initially disable insert button
@@ -3333,7 +3330,7 @@ class D3TemplateBrowserModal extends Modal {
 
 	private showPreviewPage(template: D3Template) {
 		// Hide templates section and show preview section
-		this.templatesSection.style.display = 'none';
+		this.templatesSection.addClass('d3-hidden');
 		this.previewSection.addClass('active');
 		this.currentView = 'preview';
 		
@@ -3347,10 +3344,8 @@ class D3TemplateBrowserModal extends Modal {
 		
 		// Back button
 		const backBtn = this.previewContainer.createDiv('back-button');
-		backBtn.innerHTML = `
-			<span>←</span>
-			<span>Back to Templates</span>
-		`;
+		backBtn.createSpan({ text: '←' });
+		backBtn.createSpan({ text: 'Back to templates' });
 		backBtn.addEventListener('click', () => this.showTemplatesPage());
 		
 		const previewHeader = this.previewContainer.createDiv('preview-header');
@@ -3386,7 +3381,7 @@ class D3TemplateBrowserModal extends Modal {
 		const usageTips = this.previewContainer.createDiv('usage-tips');
 		usageTips.createDiv({ text: '💡 Usage Tips:', cls: 'tips-header' });
 		const tipsList = usageTips.createEl('ul', { cls: 'tips-list' });
-		tipsList.createEl('li', { text: 'Click "Insert Template" to add to your note' });
+		tipsList.createEl('li', { text: 'Click "Insert template" to add to your note' });
 		tipsList.createEl('li', { text: 'Customize the sample data for your needs' });
 		tipsList.createEl('li', { text: 'Use the available utils for responsive design' });
 		tipsList.createEl('li', { text: 'Load external data with loadData functions' });
@@ -3395,12 +3390,12 @@ class D3TemplateBrowserModal extends Modal {
 	private showTemplatesPage() {
 		// Hide preview section and show templates section
 		this.previewSection.removeClass('active');
-		this.templatesSection.style.display = 'flex';
+		this.templatesSection.removeClass('d3-hidden');
 		this.currentView = 'templates';
 		
 		// Update buttons for templates mode
 		this.modalActions.removeClass('preview-actions');
-		this.insertBtn.textContent = 'Select a Template';
+		this.insertBtn.textContent = 'Select a template';
 		this.insertBtn.disabled = !this.selectedTemplate;
 		this.cancelBtn.textContent = 'Cancel';
 	}
@@ -3424,11 +3419,11 @@ class D3TemplateBrowserModal extends Modal {
 
 		// Switch to reading mode to show the visualization
 		setTimeout(() => {
-			const activeLeaf = this.app.workspace.activeLeaf;
-			if (activeLeaf && activeLeaf.view.getViewType() === 'markdown') {
-				const markdownView = activeLeaf.view as any;
-				if (markdownView.getMode() === 'source') {
-					markdownView.setState({ mode: 'preview' }, { history: false });
+			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (activeView) {
+				const mode = activeView.getMode();
+				if (mode === 'source') {
+					activeView.setState({ mode: 'preview' }, { history: false });
 				}
 			}
 		}, 100);
@@ -3468,7 +3463,7 @@ class D3CodeEditor extends Modal {
 		contentEl.style.overflow = 'hidden';
 
 		// Header
-		const header = contentEl.createEl('h2', { text: 'D3.js Code Editor' });
+		const header = contentEl.createEl('h2', { text: 'D3.js code editor' });
 		header.style.marginBottom = '12px';
 		header.style.flexShrink = '0';
 
@@ -3519,7 +3514,7 @@ class D3CodeEditor extends Modal {
 		rightPanel.style.display = 'flex';
 		rightPanel.style.flexDirection = 'column';
 
-		const previewHeader = rightPanel.createEl('h3', { text: 'Live Preview' });
+		const previewHeader = rightPanel.createEl('h3', { text: 'Live preview' });
 		previewHeader.style.marginBottom = '8px';
 		previewHeader.style.fontSize = '1.1em';
 
@@ -3568,12 +3563,12 @@ class D3CodeEditor extends Modal {
 		leftActions.style.display = 'flex';
 		leftActions.style.gap = '8px';
 
-		const applyBtn = leftActions.createEl('button', { text: 'Apply Changes', cls: 'mod-cta' });
+		const applyBtn = leftActions.createEl('button', { text: 'Apply changes', cls: 'mod-cta' });
 		applyBtn.addEventListener('click', () => {
 			this.applyChanges();
 		});
 
-		const resetBtn = leftActions.createEl('button', { text: 'Reset to Original' });
+		const resetBtn = leftActions.createEl('button', { text: 'Reset to original' });
 		resetBtn.addEventListener('click', () => {
 			this.codeTextarea.value = this.source;
 			this.updatePreview();
@@ -3584,10 +3579,11 @@ class D3CodeEditor extends Modal {
 		rightActions.style.display = 'flex';
 		rightActions.style.gap = '8px';
 
-		const copyBtn = rightActions.createEl('button', { text: 'Copy Code' });
+		const copyBtn = rightActions.createEl('button', { text: 'Copy code' });
 		copyBtn.addEventListener('click', () => {
-			navigator.clipboard.writeText(this.codeTextarea.value);
-			new Notice('Code copied to clipboard');
+			void navigator.clipboard.writeText(this.codeTextarea.value).then(() => {
+				new Notice('Code copied to clipboard');
+			});
 		});
 
 		const closeBtn = rightActions.createEl('button', { text: 'Close' });
@@ -3619,10 +3615,11 @@ class D3CodeEditor extends Modal {
 			// This is a simplified approach - in a real implementation,
 			// you'd need to locate the specific code block and replace it
 			new Notice('Code updated! Please manually replace your d3 code block with the new code.');
-			
+
 			// Copy to clipboard
-			navigator.clipboard.writeText(updatedCode);
-			new Notice('Updated code copied to clipboard');
+			void navigator.clipboard.writeText(updatedCode).then(() => {
+				new Notice('Updated code copied to clipboard');
+			});
 		}
 		
 		this.close();
@@ -3664,7 +3661,7 @@ class D3GraphicalEditor extends Modal {
 		this.parsedData = this.parseVisualizationData();
 
 		// Header
-		const header = contentEl.createEl('h2', { text: 'D3.js Visual Editor' });
+		const header = contentEl.createEl('h2', { text: 'D3.js visual editor' });
 		header.style.marginBottom = '12px';
 		header.style.flexShrink = '0';
 
@@ -3716,7 +3713,7 @@ class D3GraphicalEditor extends Modal {
 		actions.style.borderTop = '1px solid var(--background-modifier-border)';
 		actions.style.flexShrink = '0';
 
-		const applyBtn = actions.createEl('button', { text: 'Apply Changes', cls: 'mod-cta' });
+		const applyBtn = actions.createEl('button', { text: 'Apply changes', cls: 'mod-cta' });
 		applyBtn.addEventListener('click', () => {
 			this.applyChanges();
 		});
@@ -3732,7 +3729,7 @@ class D3GraphicalEditor extends Modal {
 		const typeSection = container.createDiv();
 		typeSection.style.marginBottom = '24px';
 
-		const typeHeader = typeSection.createEl('h4', { text: 'Visualization Type' });
+		const typeHeader = typeSection.createEl('h4', { text: 'Visualization type' });
 		typeHeader.style.marginBottom = '8px';
 
 		const typeSelect = typeSection.createEl('select');
@@ -3839,7 +3836,7 @@ class D3GraphicalEditor extends Modal {
 			];
 		}
 
-		this.parsedData.data.forEach((item: any, index: number) => {
+		this.parsedData.data.forEach((item: {label: string; value: number}, index: number) => {
 			const row = table.createEl('tr');
 			
 			const labelCell = row.createEl('td');
@@ -3902,7 +3899,7 @@ class D3GraphicalEditor extends Modal {
 		const styleSection = container.createDiv();
 		styleSection.style.marginTop = '20px';
 
-		const styleHeader = styleSection.createEl('h4', { text: 'Style Options' });
+		const styleHeader = styleSection.createEl('h4', { text: 'Style options' });
 		styleHeader.style.marginBottom = '12px';
 
 		// Width control
@@ -3964,7 +3961,7 @@ class D3GraphicalEditor extends Modal {
 
 		const customRadio = colorTypeContainer.createEl('input', { type: 'radio', attr: { name: 'colorType', value: 'custom' } });
 		customRadio.id = 'custom-radio';
-		const customLabel = colorTypeContainer.createEl('label', { text: 'Custom', attr: { for: 'custom-radio' } });
+		colorTypeContainer.createEl('label', { text: 'Custom', attr: { for: 'custom-radio' } });
 
 		// Preset colors dropdown
 		const presetContainer = colorContainer.createDiv();
@@ -4091,7 +4088,7 @@ class D3GraphicalEditor extends Modal {
 				try {
 					const obj = JSON.parse(match);
 					result.push(obj);
-				} catch (e) {
+				} catch (_e) {
 					// Try to extract label and value manually
 					const labelMatch = match.match(/["']?label["']?\s*:\s*["']([^"']+)["']/);
 					const valueMatch = match.match(/["']?value["']?\s*:\s*([0-9.]+)/);
@@ -4150,7 +4147,7 @@ class D3GraphicalEditor extends Modal {
 					if (Array.isArray(extractedData) && extractedData.length > 0) {
 						parsedData.data = extractedData;
 					}
-				} catch (e) {
+				} catch (_e) {
 					// If JSON.parse fails, try a simple regex-based extraction
 					try {
 						const simpleData = this.extractSimpleDataArray(dataMatches[1]);
@@ -4173,7 +4170,7 @@ class D3GraphicalEditor extends Modal {
 						if (Array.isArray(extractedData)) {
 							parsedData.data = extractedData;
 						}
-					} catch (e) {
+					} catch (_e) {
 						try {
 							const simpleData = this.extractSimpleDataArray(inlineDataMatch[1]);
 							if (simpleData.length > 0) {
@@ -4822,10 +4819,11 @@ g.append('g')
 			// This is a simplified approach - in a real implementation,
 			// you'd need to locate the specific code block and replace it
 			new Notice('Code generation complete! Please manually replace your d3 code block with the generated code.');
-			
+
 			// Copy to clipboard for now
-			navigator.clipboard.writeText(generatedCode);
-			new Notice('Generated code copied to clipboard');
+			void navigator.clipboard.writeText(generatedCode).then(() => {
+				new Notice('Generated code copied to clipboard');
+			});
 		}
 		
 		this.close();
@@ -4851,7 +4849,7 @@ class D3VisualizerSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Default Width')
+			.setName('Default width')
 			.setDesc('Default width for D3 visualizations (pixels)')
 			.addText(text => text
 				.setPlaceholder('600')
@@ -4865,7 +4863,7 @@ class D3VisualizerSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Default Height')
+			.setName('Default height')
 			.setDesc('Default height for D3 visualizations (pixels)')
 			.addText(text => text
 				.setPlaceholder('400')
@@ -4879,7 +4877,7 @@ class D3VisualizerSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Enable Error Display')
+			.setName('Enable error display')
 			.setDesc('Show error messages when D3 code fails to execute')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.enableErrorDisplay)
@@ -4889,7 +4887,7 @@ class D3VisualizerSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Allow Data Loading')
+			.setName('Allow data loading')
 			.setDesc('Allow D3 visualizations to load data from external sources')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.allowDataLoading)

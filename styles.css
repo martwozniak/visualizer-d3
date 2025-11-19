@@ -578,3 +578,12 @@
 }
 
 /* Responsive design - simplified since we're using a fixed narrow layout */
+
+/* Utility classes for better theming support */
+.d3-hidden {
+	display: none !important;
+}
+
+.templates-section.d3-hidden {
+	display: none !important;
+}
