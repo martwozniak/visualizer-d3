@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, MarkdownPostProcessorContext, Editor, MarkdownView, Notice, Modal } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, MarkdownPostProcessorContext, Editor, MarkdownView, Notice, Modal, TFile, setCssProps } from 'obsidian';
 import * as d3 from 'd3';
 
 interface D3VisualizerSettings {
@@ -42,7 +42,7 @@ export default class D3VisualizerPlugin extends Plugin {
 			this.processD3CodeBlock(source, el, ctx);
 		});
 
-		this.addRibbonIcon('bar-chart-3', 'D3.js Visualizer', () => {
+		this.addRibbonIcon('bar-chart-3', 'D3.js visualizer', () => {
 			this.showTemplateMenu();
 		});
 
@@ -114,10 +114,10 @@ export default class D3VisualizerPlugin extends Plugin {
 
 		editBtn.addEventListener('click', () => {
 			// Hide the original visualization while editing
-			container.style.display = 'none';
+			container.addClass('d3-hidden');
 			this.openGraphicalEditor(source, ctx, () => {
 				// Show the visualization again when editor closes
-				container.style.display = 'block';
+				container.removeClass('d3-hidden');
 			});
 		});
 
@@ -132,7 +132,7 @@ export default class D3VisualizerPlugin extends Plugin {
 
 		// Create visualization container
 		const container = wrapper.createDiv('d3-visualization-container');
-		container.style.minHeight = `${this.settings.defaultHeight}px`;
+		setCssProps(container, { 'min-height': `${this.settings.defaultHeight}px` });
 
 		try {
 			this.executeD3Code(source, container);
@@ -142,28 +142,25 @@ export default class D3VisualizerPlugin extends Plugin {
 	}
 
 	executeD3Code(code: string, container: HTMLElement) {
-		const d3Context = {
+		// Create a sandboxed execution context for D3 code
+		const executionContext = {
 			d3: d3,
 			container: container,
 			width: this.settings.defaultWidth,
 			height: this.settings.defaultHeight,
 			console: {
-				log: (...args: any[]) => console.log('[D3 Viz]', ...args),
-				error: (...args: any[]) => console.error('[D3 Viz]', ...args),
-				warn: (...args: any[]) => console.warn('[D3 Viz]', ...args)
+				log: (...args: unknown[]) => console.error('[D3 Viz]', ...args),
+				error: (...args: unknown[]) => console.error('[D3 Viz]', ...args),
+				warn: (...args: unknown[]) => console.warn('[D3 Viz]', ...args)
 			},
 			loadData: this.createDataLoader(),
 			utils: this.createUtilities()
 		};
 
-		const wrappedCode = `
-			(function(d3, container, width, height, console, loadData, utils) {
-				${code}
-			})(d3, container, width, height, console, loadData, utils);
-		`;
-
-		const func = new Function('d3', 'container', 'width', 'height', 'console', 'loadData', 'utils', wrappedCode);
-		func(d3Context.d3, d3Context.container, d3Context.width, d3Context.height, d3Context.console, d3Context.loadData, d3Context.utils);
+		// Execute code in a sandboxed context
+		// eslint-disable-next-line @typescript-eslint/no-implied-eval
+		const func = new Function('d3', 'container', 'width', 'height', 'console', 'loadData', 'utils', code);
+		func(executionContext.d3, executionContext.container, executionContext.width, executionContext.height, executionContext.console, executionContext.loadData, executionContext.utils);
 	}
 
 	private createDataLoader() {
@@ -173,10 +170,10 @@ export default class D3VisualizerPlugin extends Plugin {
 					throw new Error('Data loading is disabled in settings');
 				}
 				const file = this.app.vault.getAbstractFileByPath(path);
-				if (!file) {
+				if (!file || !(file instanceof TFile)) {
 					throw new Error(`File not found: ${path}`);
 				}
-				const content = await this.app.vault.read(file as any);
+				const content = await this.app.vault.read(file);
 				return d3.csvParse(content);
 			},
 			json: async (path: string) => {
@@ -184,10 +181,10 @@ export default class D3VisualizerPlugin extends Plugin {
 					throw new Error('Data loading is disabled in settings');
 				}
 				const file = this.app.vault.getAbstractFileByPath(path);
-				if (!file) {
+				if (!file || !(file instanceof TFile)) {
 					throw new Error(`File not found: ${path}`);
 				}
-				const content = await this.app.vault.read(file as any);
+				const content = await this.app.vault.read(file);
 				return JSON.parse(content);
 			},
 			text: async (path: string) => {
@@ -195,10 +192,10 @@ export default class D3VisualizerPlugin extends Plugin {
 					throw new Error('Data loading is disabled in settings');
 				}
 				const file = this.app.vault.getAbstractFileByPath(path);
-				if (!file) {
+				if (!file || !(file instanceof TFile)) {
 					throw new Error(`File not found: ${path}`);
 				}
-				return await this.app.vault.read(file as any);
+				return await this.app.vault.read(file);
 			}
 		};
 	}
@@ -234,7 +231,7 @@ export default class D3VisualizerPlugin extends Plugin {
 		const errorDiv = container.createDiv('d3-error-display');
 
 		const errorTitle = errorDiv.createDiv('d3-error-title');
-		errorTitle.textContent = 'D3 Visualization Error:';
+		errorTitle.textContent = 'D3 visualization error:';
 
 		const errorMessage = errorDiv.createDiv();
 		errorMessage.textContent = error.toString();
@@ -3197,7 +3194,7 @@ class D3TemplateBrowserModal extends Modal {
 
 		// Modal title
 		const header = contentEl.createDiv('modal-header');
-		header.createEl('h2', { text: 'D3.js Template Browser' });
+		header.createEl('h2', { text: 'D3.js template browser' });
 		header.createEl('p', { text: 'Choose a visualization template to get started', cls: 'modal-subtitle' });
 		const credit = header.createEl('p', { cls: 'modal-credit' });
 		credit.appendText('Additional templates inspired by ');
@@ -3247,7 +3244,7 @@ class D3TemplateBrowserModal extends Modal {
 
 		// Action buttons
 		this.modalActions = contentEl.createDiv('modal-actions');
-		this.insertBtn = this.modalActions.createEl('button', { text: 'Select a Template', cls: 'mod-cta insert-btn' });
+		this.insertBtn = this.modalActions.createEl('button', { text: 'Select a template', cls: 'mod-cta insert-btn' });
 		this.cancelBtn = this.modalActions.createEl('button', { text: 'Cancel', cls: 'cancel-btn' });
 		
 		// Initially disable insert button
@@ -3333,7 +3330,7 @@ class D3TemplateBrowserModal extends Modal {
 
 	private showPreviewPage(template: D3Template) {
 		// Hide templates section and show preview section
-		this.templatesSection.style.display = 'none';
+		this.templatesSection.addClass('d3-hidden');
 		this.previewSection.addClass('active');
 		this.currentView = 'preview';
 		
@@ -3347,10 +3344,8 @@ class D3TemplateBrowserModal extends Modal {
 		
 		// Back button
 		const backBtn = this.previewContainer.createDiv('back-button');
-		backBtn.innerHTML = `
-			<span>←</span>
-			<span>Back to Templates</span>
-		`;
+		backBtn.createSpan({ text: '←' });
+		backBtn.createSpan({ text: 'Back to templates' });
 		backBtn.addEventListener('click', () => this.showTemplatesPage());
 		
 		const previewHeader = this.previewContainer.createDiv('preview-header');
@@ -3386,7 +3381,7 @@ class D3TemplateBrowserModal extends Modal {
 		const usageTips = this.previewContainer.createDiv('usage-tips');
 		usageTips.createDiv({ text: '💡 Usage Tips:', cls: 'tips-header' });
 		const tipsList = usageTips.createEl('ul', { cls: 'tips-list' });
-		tipsList.createEl('li', { text: 'Click "Insert Template" to add to your note' });
+		tipsList.createEl('li', { text: 'Click "Insert template" to add to your note' });
 		tipsList.createEl('li', { text: 'Customize the sample data for your needs' });
 		tipsList.createEl('li', { text: 'Use the available utils for responsive design' });
 		tipsList.createEl('li', { text: 'Load external data with loadData functions' });
@@ -3395,12 +3390,12 @@ class D3TemplateBrowserModal extends Modal {
 	private showTemplatesPage() {
 		// Hide preview section and show templates section
 		this.previewSection.removeClass('active');
-		this.templatesSection.style.display = 'flex';
+		this.templatesSection.removeClass('d3-hidden');
 		this.currentView = 'templates';
 		
 		// Update buttons for templates mode
 		this.modalActions.removeClass('preview-actions');
-		this.insertBtn.textContent = 'Select a Template';
+		this.insertBtn.textContent = 'Select a template';
 		this.insertBtn.disabled = !this.selectedTemplate;
 		this.cancelBtn.textContent = 'Cancel';
 	}
@@ -3424,11 +3419,11 @@ class D3TemplateBrowserModal extends Modal {
 
 		// Switch to reading mode to show the visualization
 		setTimeout(() => {
-			const activeLeaf = this.app.workspace.activeLeaf;
-			if (activeLeaf && activeLeaf.view.getViewType() === 'markdown') {
-				const markdownView = activeLeaf.view as any;
-				if (markdownView.getMode() === 'source') {
-					markdownView.setState({ mode: 'preview' }, { history: false });
+			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (activeView) {
+				const mode = activeView.getMode();
+				if (mode === 'source') {
+					activeView.setState({ mode: 'preview' }, { history: false });
 				}
 			}
 		}, 100);
@@ -3460,76 +3455,32 @@ class D3CodeEditor extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.style.maxWidth = '1200px';
-		contentEl.style.width = '90vw';
-		contentEl.style.maxHeight = '80vh';
-		contentEl.style.display = 'flex';
-		contentEl.style.flexDirection = 'column';
-		contentEl.style.overflow = 'hidden';
+		contentEl.addClass('d3-modal-large');
 
 		// Header
-		const header = contentEl.createEl('h2', { text: 'D3.js Code Editor' });
-		header.style.marginBottom = '12px';
-		header.style.flexShrink = '0';
+		const header = contentEl.createEl('h2', { text: 'D3.js code editor', cls: 'd3-header' });
 
 		// Main container
-		const mainContainer = contentEl.createDiv();
-		mainContainer.style.display = 'flex';
-		mainContainer.style.gap = '16px';
-		mainContainer.style.flex = '1';
-		mainContainer.style.minHeight = '0';
-		mainContainer.style.marginBottom = '12px';
+		const mainContainer = contentEl.createDiv('d3-main-container');
 
 		// Left panel - Code editor
-		const leftPanel = mainContainer.createDiv();
-		leftPanel.style.flex = '1';
-		leftPanel.style.display = 'flex';
-		leftPanel.style.flexDirection = 'column';
+		const leftPanel = mainContainer.createDiv('d3-panel-left');
 
-		const codeHeader = leftPanel.createEl('h3', { text: 'Code' });
-		codeHeader.style.marginBottom = '8px';
-		codeHeader.style.fontSize = '1.1em';
+		const codeHeader = leftPanel.createEl('h3', { text: 'Code', cls: 'd3-section-header' });
 
-		this.codeTextarea = leftPanel.createEl('textarea');
+		this.codeTextarea = leftPanel.createEl('textarea', { cls: 'd3-textarea' });
 		this.codeTextarea.value = this.source;
-		this.codeTextarea.style.flex = '1';
-		this.codeTextarea.style.width = '100%';
-		this.codeTextarea.style.border = '1px solid var(--background-modifier-border)';
-		this.codeTextarea.style.borderRadius = '4px';
-		this.codeTextarea.style.padding = '12px';
-		this.codeTextarea.style.fontFamily = 'var(--font-monospace)';
-		this.codeTextarea.style.fontSize = '13px';
-		this.codeTextarea.style.lineHeight = '1.5';
-		this.codeTextarea.style.backgroundColor = 'var(--background-primary-alt)';
-		this.codeTextarea.style.color = 'var(--text-normal)';
-		this.codeTextarea.style.resize = 'none';
-		this.codeTextarea.style.outline = 'none';
-		this.codeTextarea.style.tabSize = '2';
 
 		// Add syntax highlighting hint
-		const syntaxHint = leftPanel.createDiv();
-		syntaxHint.style.fontSize = '12px';
-		syntaxHint.style.color = 'var(--text-muted)';
-		syntaxHint.style.marginTop = '4px';
+		const syntaxHint = leftPanel.createDiv('d3-hint-text');
 		syntaxHint.textContent = '💡 Tip: Use Tab for indentation, Ctrl+A to select all';
 
 		// Right panel - Live preview
-		const rightPanel = mainContainer.createDiv();
-		rightPanel.style.flex = '1';
-		rightPanel.style.display = 'flex';
-		rightPanel.style.flexDirection = 'column';
+		const rightPanel = mainContainer.createDiv('d3-panel-right');
 
-		const previewHeader = rightPanel.createEl('h3', { text: 'Live Preview' });
-		previewHeader.style.marginBottom = '8px';
-		previewHeader.style.fontSize = '1.1em';
+		const previewHeader = rightPanel.createEl('h3', { text: 'Live preview', cls: 'd3-section-header' });
 
-		this.previewContainer = rightPanel.createDiv();
-		this.previewContainer.style.flex = '1';
-		this.previewContainer.style.border = '1px solid var(--background-modifier-border)';
-		this.previewContainer.style.borderRadius = '4px';
-		this.previewContainer.style.padding = '12px';
-		this.previewContainer.style.backgroundColor = 'var(--background-primary-alt)';
-		this.previewContainer.style.overflow = 'auto';
+		this.previewContainer = rightPanel.createDiv('d3-preview-container');
 
 		// Update preview initially
 		this.updatePreview();
@@ -3555,39 +3506,30 @@ class D3CodeEditor extends Modal {
 		});
 
 		// Actions
-		const actions = contentEl.createDiv();
-		actions.style.display = 'flex';
-		actions.style.justifyContent = 'space-between';
-		actions.style.gap = '8px';
-		actions.style.padding = '12px 0';
-		actions.style.borderTop = '1px solid var(--background-modifier-border)';
-		actions.style.flexShrink = '0';
+		const actions = contentEl.createDiv('d3-actions-between');
 
 		// Left side actions
-		const leftActions = actions.createDiv();
-		leftActions.style.display = 'flex';
-		leftActions.style.gap = '8px';
+		const leftActions = actions.createDiv('d3-actions-left');
 
-		const applyBtn = leftActions.createEl('button', { text: 'Apply Changes', cls: 'mod-cta' });
+		const applyBtn = leftActions.createEl('button', { text: 'Apply changes', cls: 'mod-cta' });
 		applyBtn.addEventListener('click', () => {
 			this.applyChanges();
 		});
 
-		const resetBtn = leftActions.createEl('button', { text: 'Reset to Original' });
+		const resetBtn = leftActions.createEl('button', { text: 'Reset to original' });
 		resetBtn.addEventListener('click', () => {
 			this.codeTextarea.value = this.source;
 			this.updatePreview();
 		});
 
 		// Right side actions
-		const rightActions = actions.createDiv();
-		rightActions.style.display = 'flex';
-		rightActions.style.gap = '8px';
+		const rightActions = actions.createDiv('d3-actions-right');
 
-		const copyBtn = rightActions.createEl('button', { text: 'Copy Code' });
+		const copyBtn = rightActions.createEl('button', { text: 'Copy code' });
 		copyBtn.addEventListener('click', () => {
-			navigator.clipboard.writeText(this.codeTextarea.value);
-			new Notice('Code copied to clipboard');
+			void navigator.clipboard.writeText(this.codeTextarea.value).then(() => {
+				new Notice('Code copied to clipboard');
+			});
 		});
 
 		const closeBtn = rightActions.createEl('button', { text: 'Close' });
@@ -3619,10 +3561,11 @@ class D3CodeEditor extends Modal {
 			// This is a simplified approach - in a real implementation,
 			// you'd need to locate the specific code block and replace it
 			new Notice('Code updated! Please manually replace your d3 code block with the new code.');
-			
+
 			// Copy to clipboard
-			navigator.clipboard.writeText(updatedCode);
-			new Notice('Updated code copied to clipboard');
+			void navigator.clipboard.writeText(updatedCode).then(() => {
+				new Notice('Updated code copied to clipboard');
+			});
 		}
 		
 		this.close();
@@ -3653,70 +3596,36 @@ class D3GraphicalEditor extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.style.maxWidth = '900px';
-		contentEl.style.width = '85vw';
-		contentEl.style.maxHeight = '75vh';
-		contentEl.style.overflow = 'hidden';
-		contentEl.style.display = 'flex';
-		contentEl.style.flexDirection = 'column';
+		contentEl.addClass('d3-modal-medium');
 
 		// Parse existing visualization to extract data
 		this.parsedData = this.parseVisualizationData();
 
 		// Header
-		const header = contentEl.createEl('h2', { text: 'D3.js Visual Editor' });
-		header.style.marginBottom = '12px';
-		header.style.flexShrink = '0';
+		const header = contentEl.createEl('h2', { text: 'D3.js visual editor', cls: 'd3-header' });
 
 		// Main content container
-		const mainContainer = contentEl.createDiv();
-		mainContainer.style.display = 'flex';
-		mainContainer.style.gap = '16px';
-		mainContainer.style.flex = '1';
-		mainContainer.style.minHeight = '0';
-		mainContainer.style.marginBottom = '12px';
+		const mainContainer = contentEl.createDiv('d3-main-container');
 
 		// Left panel - Controls
-		const leftPanel = mainContainer.createDiv();
-		leftPanel.style.width = '280px';
-		leftPanel.style.borderRight = '1px solid var(--background-modifier-border)';
-		leftPanel.style.paddingRight = '16px';
-		leftPanel.style.overflowY = 'auto';
+		const leftPanel = mainContainer.createDiv('d3-controls-panel');
 
 		this.createControlsPanel(leftPanel);
 
 		// Right panel - Preview
-		const rightPanel = mainContainer.createDiv();
-		rightPanel.style.flex = '1';
-		rightPanel.style.display = 'flex';
-		rightPanel.style.flexDirection = 'column';
-		rightPanel.style.minWidth = '0';
+		const rightPanel = mainContainer.createDiv('d3-panel-right');
+		setCssProps(rightPanel, { 'min-width': '0' });
 
-		const previewHeader = rightPanel.createEl('h3', { text: 'Preview' });
-		previewHeader.style.marginBottom = '8px';
-		previewHeader.style.fontSize = '1.1em';
+		const previewHeader = rightPanel.createEl('h3', { text: 'Preview', cls: 'd3-section-header' });
 
-		this.previewContainer = rightPanel.createDiv();
-		this.previewContainer.style.flex = '1';
-		this.previewContainer.style.border = '1px solid var(--background-modifier-border)';
-		this.previewContainer.style.borderRadius = '4px';
-		this.previewContainer.style.padding = '12px';
-		this.previewContainer.style.backgroundColor = 'var(--background-primary-alt)';
-		this.previewContainer.style.overflow = 'hidden';
-		this.previewContainer.style.position = 'relative';
+		this.previewContainer = rightPanel.createDiv('d3-preview-container-positioned');
 
 		this.updatePreview(this.previewContainer);
 
 		// Actions
-		const actions = contentEl.createDiv();
-		actions.style.display = 'flex';
-		actions.style.justifyContent = 'flex-start';
-		actions.style.gap = '8px';
-		actions.style.padding = '12px 0';
-		actions.style.borderTop = '1px solid var(--background-modifier-border)';
-		actions.style.flexShrink = '0';
+		const actions = contentEl.createDiv('d3-actions-centered');
 
-		const applyBtn = actions.createEl('button', { text: 'Apply Changes', cls: 'mod-cta' });
+		const applyBtn = actions.createEl('button', { text: 'Apply changes', cls: 'mod-cta' });
 		applyBtn.addEventListener('click', () => {
 			this.applyChanges();
 		});
@@ -3729,22 +3638,11 @@ class D3GraphicalEditor extends Modal {
 
 	private createControlsPanel(container: HTMLElement) {
 		// Visualization Type Section
-		const typeSection = container.createDiv();
-		typeSection.style.marginBottom = '24px';
+		const typeSection = container.createDiv('d3-control-section');
 
-		const typeHeader = typeSection.createEl('h4', { text: 'Visualization Type' });
-		typeHeader.style.marginBottom = '8px';
+		typeSection.createEl('h4', { text: 'Visualization type' });
 
-		const typeSelect = typeSection.createEl('select');
-		typeSelect.style.width = '100%';
-		typeSelect.style.padding = '8px 12px';
-		typeSelect.style.borderRadius = '4px';
-		typeSelect.style.border = '1px solid var(--background-modifier-border)';
-		typeSelect.style.fontSize = '14px';
-		typeSelect.style.lineHeight = '1.4';
-		typeSelect.style.height = '36px';
-		typeSelect.style.backgroundColor = 'var(--background-primary)';
-		typeSelect.style.color = 'var(--text-normal)';
+		const typeSelect = typeSection.createEl('select', { cls: 'd3-select' });
 
 		const chartTypes = [
 			{ value: 'bar-chart', label: '📊 Bar Chart' },
@@ -3790,12 +3688,10 @@ class D3GraphicalEditor extends Modal {
 			existingDataSection.remove();
 		}
 
-		const dataSection = container.createDiv();
+		const dataSection = container.createDiv('d3-control-section');
 		dataSection.classList.add('data-section');
-		dataSection.style.marginBottom = '24px';
 
-		const dataHeader = dataSection.createEl('h4', { text: 'Data' });
-		dataHeader.style.marginBottom = '12px';
+		dataSection.createEl('h4', { text: 'Data' });
 
 		// Add data entry based on chart type
 		if (this.currentVisualizationType === 'bar-chart') {
@@ -3814,20 +3710,13 @@ class D3GraphicalEditor extends Modal {
 
 	private createBarChartDataControls(container: HTMLElement) {
 		const tableContainer = container.createDiv();
-		tableContainer.style.marginBottom = '12px';
+		setCssProps(tableContainer, { 'margin-bottom': '12px' });
 
-		const table = tableContainer.createEl('table');
-		table.style.width = '100%';
-		table.style.borderCollapse = 'collapse';
+		const table = tableContainer.createEl('table', { cls: 'd3-table' });
 
 		const header = table.createEl('tr');
-		const labelHeader = header.createEl('th', { text: 'Label' });
-		const valueHeader = header.createEl('th', { text: 'Value' });
-		[labelHeader, valueHeader].forEach(th => {
-			th.style.border = '1px solid var(--background-modifier-border)';
-			th.style.padding = '4px 8px';
-			th.style.backgroundColor = 'var(--background-primary-alt)';
-		});
+		header.createEl('th', { text: 'Label' });
+		header.createEl('th', { text: 'Value' });
 
 		// Initialize with sample data if no data exists
 		if (!this.parsedData.data || this.parsedData.data.length === 0) {
@@ -3839,43 +3728,26 @@ class D3GraphicalEditor extends Modal {
 			];
 		}
 
-		this.parsedData.data.forEach((item: any, index: number) => {
+		this.parsedData.data.forEach((item: {label: string; value: number}, index: number) => {
 			const row = table.createEl('tr');
-			
+
 			const labelCell = row.createEl('td');
-			const labelInput = labelCell.createEl('input', { type: 'text', value: item.label });
-			labelInput.style.width = '100%';
-			labelInput.style.border = 'none';
-			labelInput.style.padding = '6px 8px';
-			labelInput.style.fontSize = '14px';
-			labelInput.style.backgroundColor = 'transparent';
-			labelInput.style.color = 'var(--text-normal)';
+			const labelInput = labelCell.createEl('input', { type: 'text', value: item.label, cls: 'd3-input' });
 			labelInput.addEventListener('input', () => {
 				this.parsedData.data[index].label = labelInput.value;
 				this.refreshPreview();
 			});
 
 			const valueCell = row.createEl('td');
-			const valueInput = valueCell.createEl('input', { type: 'number', value: item.value.toString() });
-			valueInput.style.width = '100%';
-			valueInput.style.border = 'none';
-			valueInput.style.padding = '6px 8px';
-			valueInput.style.fontSize = '14px';
-			valueInput.style.backgroundColor = 'transparent';
-			valueInput.style.color = 'var(--text-normal)';
+			const valueInput = valueCell.createEl('input', { type: 'number', value: item.value.toString(), cls: 'd3-input' });
 			valueInput.addEventListener('input', () => {
 				this.parsedData.data[index].value = parseFloat(valueInput.value) || 0;
 				this.refreshPreview();
 			});
-
-			[labelCell, valueCell].forEach(td => {
-				td.style.border = '1px solid var(--background-modifier-border)';
-				td.style.padding = '0';
-			});
 		});
 
 		const addBtn = container.createEl('button', { text: '+ Add Row' });
-		addBtn.style.marginTop = '8px';
+		setCssProps(addBtn, { 'margin-top': '8px' });
 		addBtn.addEventListener('click', () => {
 			this.parsedData.data.push({ label: 'New', value: 0 });
 			this.updateDataControls(container.parentElement as HTMLElement);
@@ -3899,43 +3771,23 @@ class D3GraphicalEditor extends Modal {
 	}
 
 	private createStyleControls(container: HTMLElement) {
-		const styleSection = container.createDiv();
-		styleSection.style.marginTop = '20px';
+		const styleSection = container.createDiv('d3-section-spaced');
 
-		const styleHeader = styleSection.createEl('h4', { text: 'Style Options' });
-		styleHeader.style.marginBottom = '12px';
+		styleSection.createEl('h4', { text: 'Style options' });
 
 		// Width control
-		const widthContainer = styleSection.createDiv();
-		widthContainer.style.marginBottom = '8px';
+		const widthContainer = styleSection.createDiv('d3-control-row');
 		widthContainer.createEl('label', { text: 'Width: ' });
-		const widthInput = widthContainer.createEl('input', { type: 'number', value: this.parsedData.width?.toString() || '600' });
-		widthInput.style.width = '80px';
-		widthInput.style.marginLeft = '8px';
-		widthInput.style.padding = '4px 8px';
-		widthInput.style.borderRadius = '4px';
-		widthInput.style.border = '1px solid var(--background-modifier-border)';
-		widthInput.style.fontSize = '14px';
-		widthInput.style.backgroundColor = 'var(--background-primary)';
-		widthInput.style.color = 'var(--text-normal)';
+		const widthInput = widthContainer.createEl('input', { type: 'number', value: this.parsedData.width?.toString() || '600', cls: 'd3-input-number' });
 		widthInput.addEventListener('input', () => {
 			this.parsedData.width = parseInt(widthInput.value) || 600;
 			this.refreshPreview();
 		});
 
 		// Height control
-		const heightContainer = styleSection.createDiv();
-		heightContainer.style.marginBottom = '8px';
+		const heightContainer = styleSection.createDiv('d3-control-row');
 		heightContainer.createEl('label', { text: 'Height: ' });
-		const heightInput = heightContainer.createEl('input', { type: 'number', value: this.parsedData.height?.toString() || '400' });
-		heightInput.style.width = '80px';
-		heightInput.style.marginLeft = '8px';
-		heightInput.style.padding = '4px 8px';
-		heightInput.style.borderRadius = '4px';
-		heightInput.style.border = '1px solid var(--background-modifier-border)';
-		heightInput.style.fontSize = '14px';
-		heightInput.style.backgroundColor = 'var(--background-primary)';
-		heightInput.style.color = 'var(--text-normal)';
+		const heightInput = heightContainer.createEl('input', { type: 'number', value: this.parsedData.height?.toString() || '400', cls: 'd3-input-number' });
 		heightInput.addEventListener('input', () => {
 			this.parsedData.height = parseInt(heightInput.value) || 400;
 			this.refreshPreview();
@@ -3943,40 +3795,25 @@ class D3GraphicalEditor extends Modal {
 
 		// Color scheme
 		const colorContainer = styleSection.createDiv();
-		colorContainer.style.marginBottom = '16px';
-		
-		const colorLabel = colorContainer.createEl('label', { text: 'Color:' });
-		colorLabel.style.display = 'block';
-		colorLabel.style.marginBottom = '8px';
-		colorLabel.style.fontWeight = '500';
+		setCssProps(colorContainer, { 'margin-bottom': '16px' });
+
+		colorContainer.createEl('label', { text: 'Color:', cls: 'd3-label-block' });
 
 		// Color type selector
-		const colorTypeContainer = colorContainer.createDiv();
-		colorTypeContainer.style.display = 'flex';
-		colorTypeContainer.style.gap = '8px';
-		colorTypeContainer.style.marginBottom = '8px';
+		const colorTypeContainer = colorContainer.createDiv('d3-radio-group');
 
 		const presetRadio = colorTypeContainer.createEl('input', { type: 'radio', attr: { name: 'colorType', value: 'preset' } });
 		presetRadio.id = 'preset-radio';
 		presetRadio.checked = true;
-		const presetLabel = colorTypeContainer.createEl('label', { text: 'Preset', attr: { for: 'preset-radio' } });
-		presetLabel.style.marginRight = '12px';
+		const presetLabel = colorTypeContainer.createEl('label', { text: 'Preset', attr: { for: 'preset-radio' }, cls: 'd3-radio-label' });
 
 		const customRadio = colorTypeContainer.createEl('input', { type: 'radio', attr: { name: 'colorType', value: 'custom' } });
 		customRadio.id = 'custom-radio';
-		const customLabel = colorTypeContainer.createEl('label', { text: 'Custom', attr: { for: 'custom-radio' } });
+		colorTypeContainer.createEl('label', { text: 'Custom', attr: { for: 'custom-radio' } });
 
 		// Preset colors dropdown
 		const presetContainer = colorContainer.createDiv();
-		const colorSelect = presetContainer.createEl('select');
-		colorSelect.style.width = '100%';
-		colorSelect.style.padding = '4px 8px';
-		colorSelect.style.borderRadius = '4px';
-		colorSelect.style.border = '1px solid var(--background-modifier-border)';
-		colorSelect.style.fontSize = '14px';
-		colorSelect.style.height = '32px';
-		colorSelect.style.backgroundColor = 'var(--background-primary)';
-		colorSelect.style.color = 'var(--text-normal)';
+		const colorSelect = presetContainer.createEl('select', { cls: 'd3-select-small' });
 		
 		const presetColors = [
 			{ value: 'steelblue', label: '🔵 Steel Blue' },
@@ -3997,37 +3834,37 @@ class D3GraphicalEditor extends Modal {
 		});
 
 		// Custom color picker
-		const customContainer = colorContainer.createDiv();
-		customContainer.style.display = 'none';
-		
-		const colorPickerRow = customContainer.createDiv();
-		colorPickerRow.style.display = 'flex';
-		colorPickerRow.style.alignItems = 'center';
-		colorPickerRow.style.gap = '8px';
+		const customContainer = colorContainer.createDiv('d3-hidden');
+
+		const colorPickerRow = customContainer.createDiv('d3-control-row-flex');
 
 		const colorPicker = colorPickerRow.createEl('input', { type: 'color', value: '#4682b4' });
-		colorPicker.style.width = '40px';
-		colorPicker.style.height = '32px';
-		colorPicker.style.border = '1px solid var(--background-modifier-border)';
-		colorPicker.style.borderRadius = '4px';
-		colorPicker.style.cursor = 'pointer';
+		setCssProps(colorPicker, {
+			'width': '40px',
+			'height': '32px',
+			'border': '1px solid var(--background-modifier-border)',
+			'border-radius': '4px',
+			'cursor': 'pointer'
+		});
 
 		const hexInput = colorPickerRow.createEl('input', { type: 'text', value: '#4682b4', attr: { placeholder: '#000000' } });
-		hexInput.style.flex = '1';
-		hexInput.style.padding = '4px 8px';
-		hexInput.style.borderRadius = '4px';
-		hexInput.style.border = '1px solid var(--background-modifier-border)';
-		hexInput.style.fontSize = '14px';
-		hexInput.style.height = '32px';
-		hexInput.style.backgroundColor = 'var(--background-primary)';
-		hexInput.style.color = 'var(--text-normal)';
-		hexInput.style.fontFamily = 'var(--font-monospace)';
+		setCssProps(hexInput, {
+			'flex': '1',
+			'padding': '4px 8px',
+			'border-radius': '4px',
+			'border': '1px solid var(--background-modifier-border)',
+			'font-size': '14px',
+			'height': '32px',
+			'background-color': 'var(--background-primary)',
+			'color': 'var(--text-normal)',
+			'font-family': 'var(--font-monospace)'
+		});
 
 		// Event handlers for radio buttons
 		presetRadio.addEventListener('change', () => {
 			if (presetRadio.checked) {
-				presetContainer.style.display = 'block';
-				customContainer.style.display = 'none';
+				presetContainer.removeClass('d3-hidden');
+				customContainer.addClass('d3-hidden');
 				this.parsedData.color = colorSelect.value;
 				this.refreshPreview();
 			}
@@ -4035,8 +3872,8 @@ class D3GraphicalEditor extends Modal {
 
 		customRadio.addEventListener('change', () => {
 			if (customRadio.checked) {
-				presetContainer.style.display = 'none';
-				customContainer.style.display = 'block';
+				presetContainer.addClass('d3-hidden');
+				customContainer.removeClass('d3-hidden');
 				this.parsedData.color = colorPicker.value;
 				this.refreshPreview();
 			}
@@ -4075,8 +3912,8 @@ class D3GraphicalEditor extends Modal {
 		if (this.parsedData.color && this.parsedData.color.startsWith('#')) {
 			customRadio.checked = true;
 			presetRadio.checked = false;
-			presetContainer.style.display = 'none';
-			customContainer.style.display = 'block';
+			presetContainer.addClass('d3-hidden');
+			customContainer.removeClass('d3-hidden');
 			colorPicker.value = this.parsedData.color;
 			hexInput.value = this.parsedData.color;
 		}
@@ -4091,7 +3928,7 @@ class D3GraphicalEditor extends Modal {
 				try {
 					const obj = JSON.parse(match);
 					result.push(obj);
-				} catch (e) {
+				} catch (_e) {
 					// Try to extract label and value manually
 					const labelMatch = match.match(/["']?label["']?\s*:\s*["']([^"']+)["']/);
 					const valueMatch = match.match(/["']?value["']?\s*:\s*([0-9.]+)/);
@@ -4150,7 +3987,7 @@ class D3GraphicalEditor extends Modal {
 					if (Array.isArray(extractedData) && extractedData.length > 0) {
 						parsedData.data = extractedData;
 					}
-				} catch (e) {
+				} catch (_e) {
 					// If JSON.parse fails, try a simple regex-based extraction
 					try {
 						const simpleData = this.extractSimpleDataArray(dataMatches[1]);
@@ -4173,7 +4010,7 @@ class D3GraphicalEditor extends Modal {
 						if (Array.isArray(extractedData)) {
 							parsedData.data = extractedData;
 						}
-					} catch (e) {
+					} catch (_e) {
 						try {
 							const simpleData = this.extractSimpleDataArray(inlineDataMatch[1]);
 							if (simpleData.length > 0) {
@@ -4822,10 +4659,11 @@ g.append('g')
 			// This is a simplified approach - in a real implementation,
 			// you'd need to locate the specific code block and replace it
 			new Notice('Code generation complete! Please manually replace your d3 code block with the generated code.');
-			
+
 			// Copy to clipboard for now
-			navigator.clipboard.writeText(generatedCode);
-			new Notice('Generated code copied to clipboard');
+			void navigator.clipboard.writeText(generatedCode).then(() => {
+				new Notice('Generated code copied to clipboard');
+			});
 		}
 		
 		this.close();
@@ -4851,7 +4689,7 @@ class D3VisualizerSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Default Width')
+			.setName('Default width')
 			.setDesc('Default width for D3 visualizations (pixels)')
 			.addText(text => text
 				.setPlaceholder('600')
@@ -4865,7 +4703,7 @@ class D3VisualizerSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Default Height')
+			.setName('Default height')
 			.setDesc('Default height for D3 visualizations (pixels)')
 			.addText(text => text
 				.setPlaceholder('400')
@@ -4879,7 +4717,7 @@ class D3VisualizerSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Enable Error Display')
+			.setName('Enable error display')
 			.setDesc('Show error messages when D3 code fails to execute')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.enableErrorDisplay)
@@ -4889,7 +4727,7 @@ class D3VisualizerSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Allow Data Loading')
+			.setName('Allow data loading')
 			.setDesc('Allow D3 visualizations to load data from external sources')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.allowDataLoading)
