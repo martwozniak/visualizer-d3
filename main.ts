@@ -158,7 +158,7 @@ export default class D3VisualizerPlugin extends Plugin {
 		};
 
 		// Execute code in a sandboxed context
-		// eslint-disable-next-line @typescript-eslint/no-implied-eval
+		// eslint-disable-next-line @typescript-eslint/no-implied-eval -- Using Function constructor is necessary for dynamic D3 code execution in sandboxed visualization context
 		const func = new Function('d3', 'container', 'width', 'height', 'console', 'loadData', 'utils', code);
 		func(executionContext.d3, executionContext.container, executionContext.width, executionContext.height, executionContext.console, executionContext.loadData, executionContext.utils);
 	}
@@ -3222,7 +3222,7 @@ class D3TemplateBrowserModal extends Modal {
 		this.categoryFilter = filterContainer.createEl('select', { cls: 'category-filter' });
 		
 		const allOption = this.categoryFilter.createEl('option', { value: 'all' });
-		allOption.textContent = 'All Categories';
+		allOption.textContent = 'All categories';
 		
 		const categories = [...new Set(this.templates.map(t => t.category))];
 		categories.forEach(category => {
@@ -3423,7 +3423,7 @@ class D3TemplateBrowserModal extends Modal {
 			if (activeView) {
 				const mode = activeView.getMode();
 				if (mode === 'source') {
-					activeView.setState({ mode: 'preview' }, { history: false });
+					void activeView.setState({ mode: 'preview' }, { history: false });
 				}
 			}
 		}, 100);
@@ -3458,7 +3458,7 @@ class D3CodeEditor extends Modal {
 		contentEl.addClass('d3-modal-large');
 
 		// Header
-		const header = contentEl.createEl('h2', { text: 'D3.js code editor', cls: 'd3-header' });
+		contentEl.createEl('h2', { text: 'D3.js code editor', cls: 'd3-header' });
 
 		// Main container
 		const mainContainer = contentEl.createDiv('d3-main-container');
@@ -3466,7 +3466,7 @@ class D3CodeEditor extends Modal {
 		// Left panel - Code editor
 		const leftPanel = mainContainer.createDiv('d3-panel-left');
 
-		const codeHeader = leftPanel.createEl('h3', { text: 'Code', cls: 'd3-section-header' });
+		leftPanel.createEl('h3', { text: 'Code', cls: 'd3-section-header' });
 
 		this.codeTextarea = leftPanel.createEl('textarea', { cls: 'd3-textarea' });
 		this.codeTextarea.value = this.source;
@@ -3478,7 +3478,7 @@ class D3CodeEditor extends Modal {
 		// Right panel - Live preview
 		const rightPanel = mainContainer.createDiv('d3-panel-right');
 
-		const previewHeader = rightPanel.createEl('h3', { text: 'Live preview', cls: 'd3-section-header' });
+		rightPanel.createEl('h3', { text: 'Live preview', cls: 'd3-section-header' });
 
 		this.previewContainer = rightPanel.createDiv('d3-preview-container');
 
@@ -3602,7 +3602,7 @@ class D3GraphicalEditor extends Modal {
 		this.parsedData = this.parseVisualizationData();
 
 		// Header
-		const header = contentEl.createEl('h2', { text: 'D3.js visual editor', cls: 'd3-header' });
+		contentEl.createEl('h2', { text: 'D3.js visual editor', cls: 'd3-header' });
 
 		// Main content container
 		const mainContainer = contentEl.createDiv('d3-main-container');
@@ -3616,7 +3616,7 @@ class D3GraphicalEditor extends Modal {
 		const rightPanel = mainContainer.createDiv('d3-panel-right');
 		setCssProps(rightPanel, { 'min-width': '0' });
 
-		const previewHeader = rightPanel.createEl('h3', { text: 'Preview', cls: 'd3-section-header' });
+		rightPanel.createEl('h3', { text: 'Preview', cls: 'd3-section-header' });
 
 		this.previewContainer = rightPanel.createDiv('d3-preview-container-positioned');
 
@@ -3746,7 +3746,7 @@ class D3GraphicalEditor extends Modal {
 			});
 		});
 
-		const addBtn = container.createEl('button', { text: '+ Add Row' });
+		const addBtn = container.createEl('button', { text: '+ Add row' });
 		setCssProps(addBtn, { 'margin-top': '8px' });
 		addBtn.addEventListener('click', () => {
 			this.parsedData.data.push({ label: 'New', value: 0 });
@@ -3805,7 +3805,7 @@ class D3GraphicalEditor extends Modal {
 		const presetRadio = colorTypeContainer.createEl('input', { type: 'radio', attr: { name: 'colorType', value: 'preset' } });
 		presetRadio.id = 'preset-radio';
 		presetRadio.checked = true;
-		const presetLabel = colorTypeContainer.createEl('label', { text: 'Preset', attr: { for: 'preset-radio' }, cls: 'd3-radio-label' });
+		colorTypeContainer.createEl('label', { text: 'Preset', attr: { for: 'preset-radio' }, cls: 'd3-radio-label' });
 
 		const customRadio = colorTypeContainer.createEl('input', { type: 'radio', attr: { name: 'colorType', value: 'custom' } });
 		customRadio.id = 'custom-radio';
@@ -3928,7 +3928,7 @@ class D3GraphicalEditor extends Modal {
 				try {
 					const obj = JSON.parse(match);
 					result.push(obj);
-				} catch (_e) {
+				} catch {
 					// Try to extract label and value manually
 					const labelMatch = match.match(/["']?label["']?\s*:\s*["']([^"']+)["']/);
 					const valueMatch = match.match(/["']?value["']?\s*:\s*([0-9.]+)/);
@@ -3987,7 +3987,7 @@ class D3GraphicalEditor extends Modal {
 					if (Array.isArray(extractedData) && extractedData.length > 0) {
 						parsedData.data = extractedData;
 					}
-				} catch (_e) {
+				} catch {
 					// If JSON.parse fails, try a simple regex-based extraction
 					try {
 						const simpleData = this.extractSimpleDataArray(dataMatches[1]);
@@ -4010,7 +4010,7 @@ class D3GraphicalEditor extends Modal {
 						if (Array.isArray(extractedData)) {
 							parsedData.data = extractedData;
 						}
-					} catch (_e) {
+					} catch {
 						try {
 							const simpleData = this.extractSimpleDataArray(inlineDataMatch[1]);
 							if (simpleData.length > 0) {
